@@ -1,6 +1,11 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath("com.guardsquare:proguard-gradle:7.7.0") }
+}
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.application)
@@ -20,7 +25,6 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
-            implementation(compose.materialIconsExtended)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.content.negotiation)
             implementation(libs.ktor.serialization.json)
@@ -40,6 +44,8 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.ktor.client.okhttp)
+                // Windows-Natives zusätzlich einbinden (currentOs = nur macOS)
+                runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.22.2")
             }
         }
     }
@@ -79,4 +85,28 @@ tasks.register<Jar>("fatJar") {
     exclude("META-INF/versions/*/module-info.class", "module-info.class")
     from({ configurations.getByName("desktopRuntimeClasspath").map { if (it.isDirectory) it else zipTree(it) } })
     with(tasks.getByName("desktopJar") as Jar)
+
+    // Nur Skiko-Bibliotheken für die eigene macOS-Architektur und Windows x64 einpacken
+    val currentArch = if (System.getProperty("os.arch").contains("aarch64")) "arm64" else "x64"
+    val keepSkiko = listOf("libskiko-macos-$currentArch", "skiko-macos-$currentArch", "libskiko-windows-x64", "skiko-windows-x64")
+    exclude {
+        val n = it.name
+        val isSkikoNative = n.startsWith("libskiko-") || n.startsWith("skiko-")
+        isSkikoNative && keepSkiko.none { p -> n.startsWith(p) }
+    }
+}
+
+tasks.register("minifiedJar", proguard.gradle.ProGuardTask::class) {
+    group = "build"
+    description = "ProGuard-verkleinerte fatJar (nur Shrinking, keine Obfuskierung)"
+    val fatJarTask = tasks.getByName<Jar>("fatJar")
+    dependsOn(fatJarTask)
+    injars(fatJarTask.archiveFile.get().asFile)
+    outjars(layout.buildDirectory.file("libs/composeApp-min.jar").get().asFile)
+    val jmods = listOf(
+        "java.base", "java.desktop", "java.logging", "java.xml", "java.sql",
+        "java.naming", "java.management", "java.security.jgss", "jdk.unsupported"
+    )
+    jmods.forEach { libraryjars("${System.getProperty("java.home")}/jmods/$it.jmod") }
+    configuration(project.file("compose-desktop.pro"))
 }

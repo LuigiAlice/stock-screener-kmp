@@ -18,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +47,7 @@ import de.luigialice.stockscreener.ui.green
 import de.luigialice.stockscreener.ui.isScanning
 import de.luigialice.stockscreener.ui.red
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -64,8 +67,8 @@ internal fun SettingsPane(
     var batchSize by remember { mutableStateOf(25) }
     var pause by remember { mutableStateOf(3) }
     var tickerText by remember { mutableStateOf(DEFAULT_TICKERS) }
-    var universe by remember { mutableStateOf<Universe?>(null) }
     var csvError by remember { mutableStateOf<String?>(null) }
+    val activeUniverse by viewModel.universe.collectAsState()
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("📈 Rebound Screener", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -117,7 +120,7 @@ internal fun SettingsPane(
                 pickCsvText()?.let { text ->
                     runCatching { CsvUniverse.parse(text) }
                         .onSuccess {
-                            universe = it
+                            viewModel.setUniverse(it)
                             tickerText = it.tickers.joinToString(" ")
                             csvError = null
                         }
@@ -132,7 +135,7 @@ internal fun SettingsPane(
                 scope.launch {
                     runCatching { discovery.discoverUniverse() }
                         .onSuccess { uni ->
-                            universe = uni
+                            viewModel.setUniverse(uni)
                             tickerText = uni.tickers.joinToString(" ")
                             csvError = null
                         }
@@ -150,7 +153,7 @@ internal fun SettingsPane(
                 scope.launch {
                     runCatching { discovery.discoverSp500() }
                         .onSuccess { uni ->
-                            universe = uni
+                            viewModel.setUniverse(uni)
                             tickerText = uni.tickers.joinToString(" ")
                             csvError = null
                         }
@@ -162,7 +165,7 @@ internal fun SettingsPane(
             }
         ) { Text(if (fetchingLabel == "Lade S&P 500 …") "Lade S&P 500 …" else "S&P 500 laden (~500 Large Caps)") }
         csvError?.let { Text(it, fontSize = 12.sp, color = red) }
-        universe?.let { Text("Universum geladen: ${it.tickers.size} Aktien", fontSize = 12.sp, color = green) }
+        activeUniverse?.let { Text("Universum aktiv: ${it.tickers.size} Aktien", fontSize = 12.sp, color = green) }
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
         Text("Scan-Ablauf", fontWeight = FontWeight.SemiBold)
@@ -171,7 +174,7 @@ internal fun SettingsPane(
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = {
-                val uni = universe ?: run {
+                val uni = activeUniverse ?: run {
                     val tickers = parseTickers(tickerText)
                     Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
                 }
@@ -184,6 +187,21 @@ internal fun SettingsPane(
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Screener starten") }
+
+        // Regeländerungen sofort validieren: mit geladenen Kursen instant,
+        // ohne Kurse (z. B. nach Import) einmaliger Download-Scan des aktiven Universums
+        val hasBars = viewModel.rememberHasBars()
+        LaunchedEffect(mode, days, maxPerf, rsiRange, minVolume, onlyBelow12m, minScore, hasBars, activeUniverse, state.isScanning, tickerText) {
+            if (state.isScanning) return@LaunchedEffect
+            val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
+            if (tickers.isEmpty()) return@LaunchedEffect
+            delay(300) // Debounce bei Slider-Bewegungen
+            viewModel.revalidate(
+                ScanParams(mode, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
+                ScanSettings(minScore, onlyBelow12m, mode),
+                tickers, batchSize, pause, scope
+            )
+        }
         if (state.isScanning) {
             TextButton(onClick = { viewModel.cancel() }) { Text("Abbrechen") }
         }

@@ -11,12 +11,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.UriHandler
@@ -48,7 +51,17 @@ internal fun ResultsTable(
             Cell("Tag", 90, bold = true)
             Cell("Links", 130, bold = true)
         }
-        LazyColumn(Modifier.height(280.dp)) {
+        val listState = rememberLazyListState()
+    // Auswahl nachführen: nur scrollen, wenn die Zeile nicht (voll) sichtbar ist
+    LaunchedEffect(selectedIndex, rows.size) {
+        if (rows.isEmpty()) return@LaunchedEffect
+        val target = selectedIndex.coerceIn(0, rows.size - 1)
+        val visible = listState.layoutInfo.visibleItemsInfo
+        if (visible.none { it.index == target }) {
+            listState.animateScrollToItem(target)
+        }
+    }
+    LazyColumn(Modifier.height(280.dp), state = listState) {
             itemsIndexed(rows) { i, row ->
                 Row(
                     Modifier

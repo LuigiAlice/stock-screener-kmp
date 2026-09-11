@@ -1,5 +1,6 @@
 package de.luigialice.stockscreener.ui.results
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,9 +19,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,15 +50,40 @@ import de.luigialice.stockscreener.ui.results.parseHitsCsv
 @Composable
 internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
     val result = done.result
-    // Key: settings-Instanz bleibt über Zwischensnapshots eines Scans stabil
-    var displayScore by remember(result.settings) { mutableStateOf(result.settings.scoreMin) }
-    var selectedHit by remember(result.settings) { mutableStateOf(0) }
+    // Key: Scan-Modus (bleibt über Re-Scores stabil); initial = Mitte des Score-Bereichs
+    var displayScore by remember(result.settings.mode) {
+        mutableStateOf((result.settings.mode.maxScore + 1) / 2)
+    }
+    // Auswahl über Ticker statt Index, damit sie Re-Scores übersteht
+    var selectedTicker by remember { mutableStateOf<String?>(null) }
     val uriHandler = LocalUriHandler.current
     val hits = result.rows
         .filter { it.score >= displayScore }
         .filter { !result.settings.onlyBelow12m || it.below12m == true }
+    val selectedIndex = hits.indexOfFirst { it.ticker == selectedTicker }.takeIf { it >= 0 } ?: 0
 
-    Column(Modifier.fillMaxSize()) {
+    // Pfeiltasten-Navigation: die ganze Ergebnis-Spalte hält den Fokus (Klicks in sie stehlen ihn nicht),
+    // onKeyEvent (nicht Preview) damit Slider/Buttons Pfeiltasten vorab nutzen können
+    val focusRequester = remember { FocusRequester() }
+    val onKey: (Int) -> Unit = { i -> selectedTicker = hits.getOrNull(i)?.ticker }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (e.key) {
+                    Key.DirectionLeft, Key.DirectionUp -> if (selectedIndex > 0) { onKey(selectedIndex - 1); true } else false
+                    Key.DirectionRight, Key.DirectionDown -> if (selectedIndex < hits.size - 1) { onKey(selectedIndex + 1); true } else false
+                    else -> false
+                }
+            }
+    ) {
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            runCatching { focusRequester.requestFocus() }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Metric("Geprüfte Aktien", result.rows.size.toString())
             Metric("Treffer", hits.size.toString())
@@ -74,8 +108,8 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
         } else {
             ResultsTable(
                 hits,
-                selectedIndex = selectedHit.coerceIn(0, hits.size - 1),
-                onSelect = { selectedHit = it },
+                selectedIndex = selectedIndex.coerceIn(0, hits.size - 1),
+                onSelect = { i -> selectedTicker = hits.getOrNull(i)?.ticker },
                 uriHandler = uriHandler
             )
             Spacer(Modifier.height(12.dp))
@@ -86,8 +120,8 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
             }
             HitChartSelector(
                 hits,
-                selectedIndex = selectedHit,
-                onSelect = { selectedHit = it },
+                selectedIndex = selectedIndex,
+                onSelect = { i -> selectedTicker = hits.getOrNull(i)?.ticker },
                 viewModel = viewModel
             )
         }
