@@ -23,7 +23,7 @@ import de.luigialice.stockscreener.ui.red
 
 @Composable
 internal fun MainPane(state: ScanState, viewModel: ScanViewModel, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxHeight().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(modifier.padding(16.dp)) {
         when (val s = state) {
             is ScanState.Idle -> {
                 Text("CSV hochladen oder Ticker einfügen und dann „Screener starten“.", color = Color.Gray)

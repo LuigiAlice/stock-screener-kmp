@@ -1,9 +1,15 @@
 package de.luigialice.stockscreener.ui
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -23,12 +29,23 @@ fun ScreenerApp() {
     val state by viewModel.state.collectAsState()
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Row(Modifier.fillMaxSize()) {
-            SettingsPane(
-                state, viewModel, scope,
-                Modifier.width(360.dp).fillMaxHeight()
-            )
-            MainPane(state, viewModel, Modifier.weight(1f))
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth >= 700.dp) {
+                Row(Modifier.fillMaxSize()) {
+                    SettingsPane(
+                        state, viewModel, scope,
+                        Modifier.width(360.dp).fillMaxHeight().verticalScroll(rememberScrollState())
+                    )
+                    MainPane(state, viewModel, Modifier.weight(1f))
+                }
+            } else {
+                // Schmales Layout (Handy): alles in einem gemeinsamen Scroll, Panes selbst nicht scrollend
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    SettingsPane(state, viewModel, scope, Modifier.fillMaxWidth())
+                    HorizontalDivider()
+                    MainPane(state, viewModel, Modifier.fillMaxWidth())
+                }
+            }
         }
     }
 }

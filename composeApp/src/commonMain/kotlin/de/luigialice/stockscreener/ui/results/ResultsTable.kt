@@ -40,8 +40,9 @@ internal fun ResultsTable(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     uriHandler: UriHandler,
+    tableModifier: Modifier = Modifier.fillMaxWidth().height(180.dp),
 ) {
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+    Column(tableModifier.horizontalScroll(rememberScrollState())) {
         Row(Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
             listOf("Ticker", "Aktienname", "Kurs", "Perf %", "12M %", "RSI", "relVol", "SMA20 %", "SMA50 %").forEachIndexed { i, h ->
                 Cell(h, HEADER_WIDTHS[i], bold = true)
@@ -61,7 +62,7 @@ internal fun ResultsTable(
             listState.animateScrollToItem(target)
         }
     }
-    LazyColumn(Modifier.height(280.dp), state = listState) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth()) {
             itemsIndexed(rows) { i, row ->
                 Row(
                     Modifier

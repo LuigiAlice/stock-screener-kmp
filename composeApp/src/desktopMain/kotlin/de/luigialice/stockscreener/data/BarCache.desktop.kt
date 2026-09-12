@@ -1,6 +1,9 @@
 package de.luigialice.stockscreener.data
 
-import java.io.File
+import okio.Path
+import okio.Path.Companion.toPath
 
-actual fun barCacheDirectory(): File? =
-    File(System.getProperty("user.home"), ".stockscreener/bars").apply { mkdirs() }
+actual fun currentTimeMs(): Long = System.currentTimeMillis()
+
+actual fun barCacheDirectory(): Path? =
+    (System.getProperty("user.home") + "/.stockscreener/bars").toPath()

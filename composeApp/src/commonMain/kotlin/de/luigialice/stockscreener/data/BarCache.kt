@@ -3,12 +3,12 @@ package de.luigialice.stockscreener.data
 import de.luigialice.stockscreener.model.Bar
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.io.File
-import java.io.FileOutputStream
-import java.util.zip.GZIPInputStream
-import java.util.zip.GZIPOutputStream
-import java.io.FileInputStream
-import java.io.ByteArrayOutputStream
+import okio.FileSystem
+import okio.GzipSink
+import okio.GzipSource
+import okio.Path
+import okio.buffer
+import okio.use
 
 private val cacheJson = Json { ignoreUnknownKeys = true }
 
@@ -19,17 +19,18 @@ internal data class CachedBar(val date: String, val close: Double, val volume: D
 internal data class CachedBars(val fetchedAtMs: Long, val bars: List<CachedBar>)
 
 /**
- * Festplatten-Cache für Kurshistorie: eine gzippte JSON-Datei pro Ticker.
+ * Festplatten-Cache für Kurshistorie: eine gzippte JSON-Datei pro Ticker (okio, multiplattform).
  * Einträge gelten `ttlMs` (Standard: 1 Stunde); ältere werden beim Scan aufgefrischt.
  */
-class BarCache(private val dir: File?, private val ttlMs: Long = 60 * 60 * 1000L) {
+class BarCache(private val baseDir: Path?, private val ttlMs: Long = 60 * 60 * 1000L) {
 
     private val memory = mutableMapOf<String, CachedBars>()
+    private val fs = FileSystem.SYSTEM
 
     /** Bars nur wenn innerhalb der Gültigkeitsfrist, sonst null. */
     fun freshBars(ticker: String): List<Bar>? {
         val entry = readEntry(ticker) ?: return null
-        if (System.currentTimeMillis() - entry.fetchedAtMs > ttlMs) return null
+        if (currentTimeMs() - entry.fetchedAtMs > ttlMs) return null
         return entry.bars.map { Bar(kotlinx.datetime.LocalDate.parse(it.date), it.close, it.volume) }
     }
 
@@ -39,43 +40,43 @@ class BarCache(private val dir: File?, private val ttlMs: Long = 60 * 60 * 1000L
     }
 
     fun store(ticker: String, bars: List<Bar>) {
-        val base = dir ?: return
+        val base = baseDir ?: return
         if (bars.isEmpty()) return
         runCatching {
-            base.mkdirs()
+            fs.createDirectories(base)
             val entry = CachedBars(
-                fetchedAtMs = System.currentTimeMillis(),
+                fetchedAtMs = currentTimeMs(),
                 bars = bars.map { CachedBar(it.date.toString(), it.close, it.volume) }
             )
-            writeGzip(fileFor(ticker), cacheJson.encodeToString(CachedBars.serializer(), entry))
+            fs.sink(fileFor(base, ticker)).use { raw ->
+                GzipSink(raw).buffer().use { gz ->
+                    gz.writeUtf8(cacheJson.encodeToString(CachedBars.serializer(), entry))
+                }
+            }
             memory[ticker] = entry
         }
     }
 
-    private fun fileFor(ticker: String): File =
-        File(dir, ticker.replace(Regex("[^A-Za-z0-9-]"), "_") + ".json.gz")
+    internal fun fileFor(base: Path, ticker: String): Path =
+        base / (ticker.replace(Regex("[^A-Za-z0-9-]"), "_") + ".json.gz")
 
     private fun readEntry(ticker: String): CachedBars? {
         memory[ticker]?.let { return it }
-        val f = fileFor(ticker)
-        if (!f.isFile) return null
-        val text = runCatching { readGzip(f) }.getOrNull() ?: return null
+        val base = baseDir ?: return null
+        val f = fileFor(base, ticker)
+        if (!fs.exists(f)) return null
+        val text = runCatching {
+            fs.source(f).use { raw ->
+                GzipSource(raw).buffer().readUtf8()
+            }
+        }.getOrNull() ?: return null
         val entry = runCatching { cacheJson.decodeFromString(CachedBars.serializer(), text) }.getOrNull() ?: return null
         memory[ticker] = entry
         return entry
     }
-
-    private fun writeGzip(file: File, content: String) {
-        GZIPOutputStream(FileOutputStream(file).buffered()).use { it.write(content.encodeToByteArray()) }
-    }
-
-    private fun readGzip(file: File): String =
-        GZIPInputStream(FileInputStream(file).buffered()).use { ins ->
-            val out = ByteArrayOutputStream()
-            ins.copyTo(out)
-            out.toByteArray().decodeToString()
-        }
 }
 
+internal expect fun currentTimeMs(): Long
+
 /** Cache-Verzeichnis der Plattform; null = Cache deaktiviert. */
-expect fun barCacheDirectory(): File?
+expect fun barCacheDirectory(): Path?

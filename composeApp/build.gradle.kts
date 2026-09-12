@@ -20,11 +20,25 @@ kotlin {
     }
     jvm("desktop")
 
+    iosArm64()
+    iosSimulatorArm64()
+    iosX64()
+
+    listOf(
+        iosArm64(), iosSimulatorArm64(), iosX64()
+    ).forEach { target ->
+        target.binaries.framework {
+            baseName = "StockScreenerKit"
+            isStatic = true
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(libs.okio)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.content.negotiation)
             implementation(libs.ktor.serialization.json)
@@ -47,6 +61,9 @@ kotlin {
                 // Windows-Natives zusätzlich einbinden (currentOs = nur macOS)
                 runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.22.2")
             }
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
     }
 }

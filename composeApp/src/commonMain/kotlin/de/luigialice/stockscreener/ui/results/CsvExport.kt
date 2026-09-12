@@ -5,8 +5,9 @@ import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanResult
 import de.luigialice.stockscreener.model.ScanRow
 import de.luigialice.stockscreener.model.ScanSettings
+import de.luigialice.stockscreener.ui.fmtDouble
 
-private fun fmtCsv(v: Double, digits: Int = 2): String = String.format(java.util.Locale.ROOT, "%.${digits}f", v)
+private fun fmtCsv(v: Double, digits: Int = 2): String = fmtDouble(v, digits, '.', null)
 
 private fun csvField(text: String): String = "\"${text.replace("\"", "\"\"")}\""
 

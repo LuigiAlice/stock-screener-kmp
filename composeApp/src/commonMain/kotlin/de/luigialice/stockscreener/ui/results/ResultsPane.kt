@@ -2,6 +2,7 @@ package de.luigialice.stockscreener.ui.results
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,25 +67,30 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
     // onKeyEvent (nicht Preview) damit Slider/Buttons Pfeiltasten vorab nutzen können
     val focusRequester = remember { FocusRequester() }
     val onKey: (Int) -> Unit = { i -> selectedTicker = hits.getOrNull(i)?.ticker }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .focusRequester(focusRequester)
-            .focusable()
-            .onKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (e.key) {
-                    Key.DirectionLeft, Key.DirectionUp -> if (selectedIndex > 0) { onKey(selectedIndex - 1); true } else false
-                    Key.DirectionRight, Key.DirectionDown -> if (selectedIndex < hits.size - 1) { onKey(selectedIndex + 1); true } else false
-                    else -> false
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val bounded = constraints.hasBoundedHeight
+        Column(
+            Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable()
+                .onKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    when (e.key) {
+                        Key.DirectionLeft, Key.DirectionUp -> if (selectedIndex > 0) { onKey(selectedIndex - 1); true } else false
+                        Key.DirectionRight, Key.DirectionDown -> if (selectedIndex < hits.size - 1) { onKey(selectedIndex + 1); true } else false
+                        else -> false
+                    }
                 }
+        ) {
+            LaunchedEffect(Unit) {
+                withFrameNanos { }
+                runCatching { focusRequester.requestFocus() }
             }
-    ) {
-        LaunchedEffect(Unit) {
-            withFrameNanos { }
-            runCatching { focusRequester.requestFocus() }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            val tableModifier = if (bounded) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().height(180.dp)
+            val chartModifier = if (bounded) Modifier.fillMaxWidth().weight(2f).padding(vertical = 8.dp)
+            else Modifier.fillMaxWidth().height(340.dp).padding(vertical = 8.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Metric("Geprüfte Aktien", result.rows.size.toString())
             Metric("Treffer", hits.size.toString())
             Metric("Modus", result.settings.mode.label)
@@ -110,7 +116,8 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
                 hits,
                 selectedIndex = selectedIndex.coerceIn(0, hits.size - 1),
                 onSelect = { i -> selectedTicker = hits.getOrNull(i)?.ticker },
-                uriHandler = uriHandler
+                uriHandler = uriHandler,
+                tableModifier = tableModifier
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -122,8 +129,10 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
                 hits,
                 selectedIndex = selectedIndex,
                 onSelect = { i -> selectedTicker = hits.getOrNull(i)?.ticker },
-                viewModel = viewModel
+                viewModel = viewModel,
+                chartModifier = chartModifier
             )
+        }
         }
     }
 }
@@ -154,6 +163,7 @@ private fun HitChartSelector(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     viewModel: ScanViewModel,
+    chartModifier: Modifier = Modifier.fillMaxWidth().height(340.dp).padding(vertical = 8.dp),
 ) {
     val index = selectedIndex.coerceIn(0, hits.size - 1)
     val selected = hits[index]
@@ -171,7 +181,7 @@ private fun HitChartSelector(
     if (bars.isNotEmpty()) {
         LineChart(
             bars,
-            Modifier.fillMaxWidth().height(340.dp).padding(vertical = 8.dp),
+            chartModifier,
             title = "${selected.ticker} · ${selected.name} · ${fmtDate(bars.first().date)} – ${fmtDate(bars.last().date)}"
         )
     }

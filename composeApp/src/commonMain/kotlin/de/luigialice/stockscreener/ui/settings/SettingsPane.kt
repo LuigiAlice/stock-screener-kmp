@@ -70,7 +70,7 @@ internal fun SettingsPane(
     var csvError by remember { mutableStateOf<String?>(null) }
     val activeUniverse by viewModel.universe.collectAsState()
 
-    Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(modifier.padding(16.dp)) {
         Text("📈 Rebound Screener", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text("Kein Kaufsignal, keine Anlageberatung.", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(16.dp))

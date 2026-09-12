@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import de.luigialice.stockscreener.model.Bar
 import de.luigialice.stockscreener.ui.fmt
 import de.luigialice.stockscreener.ui.fmtDate
-import de.luigialice.stockscreener.ui.germanLocale
+import de.luigialice.stockscreener.ui.fmtDouble
 import de.luigialice.stockscreener.ui.green
 
 @Composable
@@ -87,7 +87,7 @@ fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = n
 
                     if (plotW > 0f && plotH > 0f) {
                         val yLabels = yTickValues(it).map { v ->
-                            val label = if (it.range >= 40) String.format(germanLocale, "%,.0f", v) else String.format(germanLocale, "%,.2f", v)
+                            val label = if (it.range >= 40) fmtDouble(v, 0, ',', '.') else fmtDouble(v, 2, ',', '.')
                             textMeasurer.measure(label, axisStyle) to chartY(v, it, plotTop, plotH)
                         }
                         // Monatsraster: Gitterlinie an jedem Monatsanfang, Jahreszahlen an Jahreswechsel

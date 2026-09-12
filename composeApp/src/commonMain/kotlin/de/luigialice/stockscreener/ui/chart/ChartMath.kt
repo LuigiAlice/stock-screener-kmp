@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener.ui.chart
 
 import de.luigialice.stockscreener.model.Bar
+import de.luigialice.stockscreener.ui.fmtDouble
 import kotlin.math.roundToInt
 
 data class ChartScale(val lo: Double, val hi: Double, val range: Double)
@@ -51,8 +52,8 @@ fun monthTicks(bars: List<Bar>): List<MonthTick> {
 }
 
 fun volumeLabel(volume: Double): String = when {
-    volume >= 1e9 -> String.format(java.util.Locale.GERMAN, "%,.2f Mrd", volume / 1e9)
-    volume >= 1e6 -> String.format(java.util.Locale.GERMAN, "%,.2f Mio", volume / 1e6)
-    volume >= 1e3 -> String.format(java.util.Locale.GERMAN, "%,.1f Tsd", volume / 1e3)
-    else -> String.format(java.util.Locale.GERMAN, "%,.0f", volume)
+    volume >= 1e9 -> fmtDouble(volume / 1e9, 2, ',', '.') + " Mrd"
+    volume >= 1e6 -> fmtDouble(volume / 1e6, 2, ',', '.') + " Mio"
+    volume >= 1e3 -> fmtDouble(volume / 1e3, 1, ',', '.') + " Tsd"
+    else -> fmtDouble(volume, 0, ',', null)
 }

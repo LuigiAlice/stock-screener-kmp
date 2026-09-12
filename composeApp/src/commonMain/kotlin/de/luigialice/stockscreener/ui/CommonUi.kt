@@ -12,24 +12,48 @@ import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.pow
+import kotlin.math.roundToLong
 import kotlinx.datetime.LocalDate
-import java.util.Locale
-
-internal val germanLocale = Locale.GERMAN
 
 internal val green = Color(0xFF22C55E)
 internal val red = Color(0xFFEF4444)
 
+/**
+ * Reine Kotlin-Zahlenformatierung (multiplattform): Rundung auf `digits`,
+ * optionales Gruppieren, frei wählbare Trennzeichen.
+ * de-DE: fmtDouble(1234.5, 2, ',', '.') -> "1.234,50"
+ * ROOT:  fmtDouble(1234.5, 2, '.', null) -> "1234.50"
+ */
+internal fun fmtDouble(v: Double, digits: Int, decimalSep: Char, groupSep: Char?): String {
+    val factor = 10.0.pow(digits).toLong()
+    val scaled = (v * factor).roundToLong()
+    val negative = scaled < 0
+    val abs = if (negative) -scaled else scaled
+    val intPart = abs / factor
+    val frac = abs % factor
+    var intStr = intPart.toString()
+    if (groupSep != null) {
+        intStr = intStr.reversed().chunked(3).joinToString(groupSep.toString()) { it.reversed() }
+    }
+    val fracStr = if (digits > 0) decimalSep + frac.toString().padStart(digits, '0') else ""
+    val sign = if (negative && (intPart != 0L || frac != 0L)) "-" else if (negative && intPart == 0L && frac == 0L) "" else ""
+    return sign + intStr + fracStr
+}
+
 /** Zahlen deutsch: Tausender-Punkt, Dezimal-Komma (z. B. 1.234,56). */
-internal fun fmt(v: Double, digits: Int = 2): String = String.format(germanLocale, "%,.${digits}f", v)
+internal fun fmt(v: Double, digits: Int = 2): String = fmtDouble(v, digits, ',', '.')
 
 /** TT.MM.JJJJ */
 internal fun fmtDate(date: LocalDate): String =
-    "%02d.%02d.%04d".format(date.dayOfMonth, date.monthNumber, date.year)
+    date.dayOfMonth.toString().padStart(2, '0') + "." +
+        date.monthNumber.toString().padStart(2, '0') + "." +
+        date.year.toString().padStart(4, '0')
 
 /** TT.MM. */
 internal fun fmtDateShort(date: LocalDate): String =
-    "%02d.%02d.".format(date.dayOfMonth, date.monthNumber)
+    date.dayOfMonth.toString().padStart(2, '0') + "." +
+        date.monthNumber.toString().padStart(2, '0') + "."
 
 /** "2026-09-09" -> "09.09.2026" */
 internal fun fmtIsoDate(iso: String?): String {
