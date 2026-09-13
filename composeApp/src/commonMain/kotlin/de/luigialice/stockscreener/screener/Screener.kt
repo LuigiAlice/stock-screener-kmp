@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener.screener
 
 import de.luigialice.stockscreener.model.Bar
+import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanResult
 import de.luigialice.stockscreener.model.ScanRow
@@ -111,11 +112,11 @@ object Screener {
         loader: (String) -> List<Bar>?
     ): ScanResult {
         val rows = mutableListOf<ScanRow>()
-        val failed = mutableListOf<String>()
+        val failed = mutableMapOf<String, FailedReason>()
         universe.tickers.forEach { ticker ->
             val bars = loader(ticker)
             val row = bars?.let { calcRow(ticker, universe.names[ticker] ?: "—", it, params, universe.exchanges[ticker] ?: "") }
-            if (row == null) failed.add(ticker) else rows.add(row)
+            if (row == null) failed[ticker] = FailedReason.NO_DATA else rows.add(row)
         }
         return ScanResult(
             rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),

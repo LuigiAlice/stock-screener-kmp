@@ -43,9 +43,11 @@ data class ScanSettings(
     val mode: ScanMode
 )
 
+enum class FailedReason { RATE_LIMITED, NETWORK_ERROR, NO_DATA }
+
 data class ScanResult(
     val rows: List<ScanRow>,
-    val failed: List<String>,
+    val failed: Map<String, FailedReason>,
     val settings: ScanSettings
 )
 

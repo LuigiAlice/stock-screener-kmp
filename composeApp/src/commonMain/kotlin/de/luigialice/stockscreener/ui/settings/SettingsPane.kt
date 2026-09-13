@@ -49,6 +49,7 @@ import de.luigialice.stockscreener.ui.red
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 internal fun SettingsPane(
@@ -65,13 +66,13 @@ internal fun SettingsPane(
     var onlyBelow12m by remember { mutableStateOf(true) }
     var minScore by remember { mutableStateOf(5) }
     var batchSize by remember { mutableStateOf(25) }
-    var pause by remember { mutableStateOf(3) }
+    var pause by remember { mutableStateOf(1) }
     var tickerText by remember { mutableStateOf(DEFAULT_TICKERS) }
     var csvError by remember { mutableStateOf<String?>(null) }
     val activeUniverse by viewModel.universe.collectAsState()
 
     Column(modifier.padding(16.dp)) {
-        Text("📈 Rebound Screener", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Rebound Screener", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text("Kein Kaufsignal, keine Anlageberatung.", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(16.dp))
 
@@ -195,7 +196,7 @@ internal fun SettingsPane(
             if (state.isScanning) return@LaunchedEffect
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return@LaunchedEffect
-            delay(300) // Debounce bei Slider-Bewegungen
+            delay(300.milliseconds) // Debounce bei Slider-Bewegungen
             viewModel.revalidate(
                 ScanParams(mode, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
                 ScanSettings(minScore, onlyBelow12m, mode),

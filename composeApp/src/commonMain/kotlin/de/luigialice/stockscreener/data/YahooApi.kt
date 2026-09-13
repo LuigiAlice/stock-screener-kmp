@@ -32,13 +32,15 @@ private data class Indicators(val quote: List<Quote> = emptyList())
 @Serializable
 private data class Quote(val close: List<Double?> = emptyList(), val volume: List<Double?> = emptyList())
 
+class YahooHttpException(val status: Int) : Exception("Yahoo HTTP $status")
+
 class YahooApi(private val client: HttpClient = createYahooClient()) {
 
     @OptIn(ExperimentalTime::class)
     suspend fun fetchBars(ticker: String, range: String = "2y"): List<Bar> {
         val url = "https://query1.finance.yahoo.com/v8/finance/chart/$ticker?range=$range&interval=1d"
         val response = client.get(url) { header("User-Agent", "Mozilla/5.0") }
-        if (!response.status.isSuccess()) error("Yahoo HTTP ${response.status.value} für $ticker")
+        if (!response.status.isSuccess()) throw YahooHttpException(response.status.value)
         val envelope = json.decodeFromString(ChartEnvelope.serializer(), response.bodyAsText())
         val result = envelope.chart.result.firstOrNull() ?: return emptyList()
         val quote = result.indicators.quote.firstOrNull() ?: return emptyList()

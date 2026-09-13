@@ -70,7 +70,7 @@ internal fun buildImportedResult(rows: List<ScanRow>): ScanResult {
     val mode = if (maxScore == ScanMode.REBOUND_START.maxScore) ScanMode.REBOUND_START else ScanMode.ONGOING_RECOVERY
     return ScanResult(
         rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
-        failed = emptyList(),
+        failed = emptyMap(),
         settings = ScanSettings(scoreMin = 1, onlyBelow12m = false, mode = mode)
     )
 }

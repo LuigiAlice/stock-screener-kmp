@@ -2,8 +2,10 @@ package de.luigialice.stockscreener.ui
 
 import de.luigialice.stockscreener.data.BarCache
 import de.luigialice.stockscreener.data.YahooApi
+import de.luigialice.stockscreener.data.YahooHttpException
 import de.luigialice.stockscreener.data.barCacheDirectory
 import de.luigialice.stockscreener.model.Bar
+import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanResult
 import de.luigialice.stockscreener.model.ScanRow
@@ -40,6 +42,8 @@ expect abstract class PlatformViewModel()
 
 val ScanState.isScanning: Boolean
     get() = this is ScanState.Running || (this is ScanState.Done && scanned < total)
+
+private data class FetchOutcome(val bars: List<Bar>? = null, val reason: FailedReason? = null)
 
 class ScanViewModel(
     private val api: YahooApi = YahooApi(),
@@ -120,35 +124,41 @@ class ScanViewModel(
         job = scope.launch {
             try {
                 val rows = mutableListOf<ScanRow>()
-                val failed = mutableListOf<String>()
+                val failed = mutableMapOf<String, FailedReason>()
                 val loadedPrices = mutableMapOf<String, List<Bar>>()
                 val total = universe.tickers.size
 
                 universe.tickers.chunked(batchSize).forEachIndexed { batchIndex, batch ->
                     // Ticker eines Batches parallel laden; Batch-Größe = Parallelität; Cache-first
                     var networkFetches = 0
-                    val batchResults: List<Pair<String, List<Bar>?>> = batch.map { ticker ->
+                    val batchResults: List<Pair<String, FetchOutcome>> = batch.map { ticker ->
                         async {
                             val cached = barCache.freshBars(ticker)
-                            if (cached != null) return@async ticker to cached
+                            if (cached != null) return@async ticker to FetchOutcome(bars = cached)
                             networkFetches++
                             try {
-                                ticker to withContext(Dispatchers.Default) { api.fetchBars(ticker) }
+                                ticker to FetchOutcome(bars = withContext(Dispatchers.Default) { api.fetchBars(ticker) })
                             } catch (e: CancellationException) {
                                 throw e
+                            } catch (e: YahooHttpException) {
+                                val reason = if (e.status == 429) FailedReason.RATE_LIMITED else FailedReason.NETWORK_ERROR
+                                ticker to FetchOutcome(reason = reason)
                             } catch (e: Exception) {
-                                ticker to null
+                                ticker to FetchOutcome(reason = FailedReason.NETWORK_ERROR)
                             }
                         }
                     }.awaitAll()
 
-                    batchResults.forEach { (ticker, bars) ->
-                        if (bars.isNullOrEmpty()) {
-                            failed.add(ticker)
-                        } else {
-                            barCache.store(ticker, bars)
-                            val row = Screener.calcRow(ticker, universe.names[ticker] ?: "—", bars, params, universe.exchanges[ticker] ?: "")
-                            if (row == null) failed.add(ticker) else { rows.add(row); loadedPrices[ticker] = bars }
+                    batchResults.forEach { (ticker, outcome) ->
+                        when {
+                            outcome.bars.isNullOrEmpty() ->
+                                failed[ticker] = outcome.reason ?: FailedReason.NO_DATA
+                            else -> {
+                                barCache.store(ticker, outcome.bars)
+                                val row = Screener.calcRow(ticker, universe.names[ticker] ?: "—", outcome.bars, params, universe.exchanges[ticker] ?: "")
+                                if (row == null) failed[ticker] = FailedReason.NO_DATA
+                                else { rows.add(row); loadedPrices[ticker] = outcome.bars }
+                            }
                         }
                     }
 
@@ -157,7 +167,7 @@ class ScanViewModel(
                     _state.value = ScanState.Done(
                         ScanResult(
                             rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
-                            failed = failed.toList(),
+                            failed = failed.toMap(),
                             settings = settings
                         ),
                         scanned = rows.size + failed.size,
@@ -204,24 +214,31 @@ class ScanViewModel(
             job?.cancel()
             // Kein Running-Emit: ResultsPane bleibt in der Komposition (Slider/ Auswahl bleiben erhalten),
             // die alten Ergebnisse bleiben sichtbar, bis der neue Stand fertig ist.
+            // Fortschritt über Done-Snapshots pro Batch (isScanning zeigt den Balken).
             job = scope.launch {
                 try {
-                    val rows = withContext(Dispatchers.Default) {
-                        uni.tickers.mapNotNull { ticker ->
-                            prices.value[ticker]?.let { bars ->
-                                Screener.calcRow(ticker, uni.names[ticker] ?: "—", bars, params, uni.exchanges[ticker] ?: "")
+                    val loaded = prices.value
+                    val rows = mutableListOf<ScanRow>()
+                    val total = uni.tickers.size
+                    uni.tickers.chunked(batchSize.coerceAtLeast(1)).forEachIndexed { i, chunk ->
+                        val chunkRows = withContext(Dispatchers.Default) {
+                            chunk.mapNotNull { ticker ->
+                                loaded[ticker]?.let { bars ->
+                                    Screener.calcRow(ticker, uni.names[ticker] ?: "—", bars, params, uni.exchanges[ticker] ?: "")
+                                }
                             }
                         }
+                        rows.addAll(chunkRows)
+                        _state.value = ScanState.Done(
+                            ScanResult(
+                                rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
+                                failed = emptyMap(),
+                                settings = settings
+                            ),
+                            scanned = ((i + 1) * chunk.size).coerceAtMost(total),
+                            total = total
+                        )
                     }
-                    _state.value = ScanState.Done(
-                        ScanResult(
-                            rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
-                            failed = emptyList(),
-                            settings = settings
-                        ),
-                        scanned = uni.tickers.size,
-                        total = uni.tickers.size
-                    )
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

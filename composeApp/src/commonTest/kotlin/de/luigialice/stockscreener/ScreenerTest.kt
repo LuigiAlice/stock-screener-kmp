@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener
 
 import de.luigialice.stockscreener.model.Bar
+import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanSettings
@@ -196,7 +197,7 @@ class ScreenerTest {
             ScanSettings(4, true, ScanMode.ONGOING_RECOVERY)
         ) { bars[it] }
         assertEquals(listOf("AAA", "BBB"), result.rows.map { it.ticker })
-        assertEquals(listOf("XXX"), result.failed)
+        assertEquals(mapOf("XXX" to FailedReason.NO_DATA), result.failed)
         assertTrue(result.rows.first().score >= result.rows.last().score)
     }
 }

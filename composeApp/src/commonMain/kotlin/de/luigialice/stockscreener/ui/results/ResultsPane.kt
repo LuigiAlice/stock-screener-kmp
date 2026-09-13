@@ -36,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.luigialice.stockscreener.exportCsv
+import de.luigialice.stockscreener.model.FailedReason
+import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanRow
 import de.luigialice.stockscreener.pickCsvText
 import de.luigialice.stockscreener.ui.LinkText
@@ -51,9 +53,12 @@ import de.luigialice.stockscreener.ui.results.parseHitsCsv
 @Composable
 internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
     val result = done.result
-    // Key: Scan-Modus (bleibt über Re-Scores stabil); initial = Mitte des Score-Bereichs
-    var displayScore by remember(result.settings.mode) {
-        mutableStateOf((result.settings.mode.maxScore + 1) / 2)
+    val mode = result.settings.mode
+    // Trefferfilter pro Scan-Modus gemerkter Zustand; initial = Mitte des Score-Bereichs
+    var scoresByMode by remember { mutableStateOf<Map<ScanMode, Int>>(emptyMap()) }
+    var displayScore = scoresByMode[mode] ?: ((mode.maxScore + 1) / 2)
+    fun setDisplayScore(v: Int) {
+        scoresByMode = scoresByMode + (mode to v)
     }
     // Auswahl über Ticker statt Index, damit sie Re-Scores übersteht
     var selectedTicker by remember { mutableStateOf<String?>(null) }
@@ -98,14 +103,25 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
         SliderRow(
             "Trefferfilter (ohne neuen Scan)", "$displayScore",
             displayScore.toFloat(), 1f, result.settings.mode.maxScore.toFloat()
-        ) { displayScore = it.toInt() }
+        ) { setDisplayScore(it.toInt()) }
         Text(
             "Score = Anzahl erfüllter Kriterien (0–${result.settings.mode.maxScore}). " +
                 result.rows.firstOrNull()?.criteria?.keys?.joinToString(" · ").orEmpty(),
             fontSize = 12.sp, color = Color.Gray
         )
         if (result.failed.isNotEmpty()) {
-            Text("${result.failed.size} Ticker ohne verwertbare Daten", fontSize = 12.sp, color = Color(0xFFB45309))
+            val rateLimited = result.failed.count { it.value == FailedReason.RATE_LIMITED }
+            val network = result.failed.count { it.value == FailedReason.NETWORK_ERROR }
+            val noData = result.failed.count { it.value == FailedReason.NO_DATA }
+            Text(
+                "${result.failed.size} Ticker ohne verwertbare Daten — " +
+                    listOfNotNull(
+                        if (rateLimited > 0) "Rate-Limit: $rateLimited" else null,
+                        if (network > 0) "Netzwerkfehler: $network" else null,
+                        if (noData > 0) "keine Kursdaten: $noData" else null
+                    ).joinToString(" · "),
+                fontSize = 12.sp, color = Color(0xFFB45309)
+            )
         }
         Spacer(Modifier.height(8.dp))
         Text("Treffer (${hits.size})", fontWeight = FontWeight.SemiBold)
@@ -173,10 +189,16 @@ private fun HitChartSelector(
 
     LaunchedEffect(selected.ticker) { viewModel.loadBars(selected.ticker, scope) }
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { onSelect(index - 1) }, enabled = index > 0) { Text("◀ Zurück") }
-        Text("${index + 1}/${hits.size} — ${selected.ticker} · ${selected.name}", fontWeight = FontWeight.SemiBold)
         Button(onClick = { onSelect(index + 1) }, enabled = index < hits.size - 1) { Text("Weiter ▶") }
+        Text(
+            "${index + 1}/${hits.size} — ${selected.ticker} · ${selected.name}",
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
     if (bars.isNotEmpty()) {
         LineChart(
