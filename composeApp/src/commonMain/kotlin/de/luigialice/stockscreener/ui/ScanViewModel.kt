@@ -4,6 +4,7 @@ import de.luigialice.stockscreener.data.BarCache
 import de.luigialice.stockscreener.data.YahooApi
 import de.luigialice.stockscreener.data.YahooHttpException
 import de.luigialice.stockscreener.data.barCacheDirectory
+import de.luigialice.stockscreener.data.currentTimeMs
 import de.luigialice.stockscreener.model.Bar
 import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanParams
@@ -22,10 +23,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
 
 sealed interface ScanState {
     data object Idle : ScanState
@@ -63,6 +66,19 @@ class ScanViewModel(
     fun cancel() {
         job?.cancel()
         _state.value = ScanState.Idle
+    }
+
+    /** Ist gerade ein Scan/Re-Score-Job aktiv? */
+    fun jobActive(): Boolean = job?.isActive == true
+
+    /**
+     * Selbstheilung: hängt der State in einem partiellen Done (isScanning) ohne aktiven Job
+     * (z. B. durch eine überholte Status-Emission), wird er abgeschlossen.
+     */
+    fun completeIfStuck(done: ScanState.Done) {
+        if (state.value === done && !jobActive()) {
+            _state.value = done.copy(scanned = done.total)
+        }
     }
 
     /** Universum setzen (CSV, automatische Ermittlung). */
@@ -163,6 +179,7 @@ class ScanViewModel(
                     }
 
                     // Inkrementelles Zwischenergebnis nach jedem Batch
+                    ensureActive() // abgebrochene Scans dürfen keinen Status mehr schreiben
                     prices.value = loadedPrices.toMap()
                     _state.value = ScanState.Done(
                         ScanResult(
@@ -220,7 +237,9 @@ class ScanViewModel(
                     val loaded = prices.value
                     val rows = mutableListOf<ScanRow>()
                     val total = uni.tickers.size
-                    uni.tickers.chunked(batchSize.coerceAtLeast(1)).forEachIndexed { i, chunk ->
+                    var lastEmit = 0L
+                    val chunks = uni.tickers.chunked(batchSize.coerceAtLeast(1))
+                    chunks.forEachIndexed { i, chunk ->
                         val chunkRows = withContext(Dispatchers.Default) {
                             chunk.mapNotNull { ticker ->
                                 loaded[ticker]?.let { bars ->
@@ -229,15 +248,22 @@ class ScanViewModel(
                             }
                         }
                         rows.addAll(chunkRows)
-                        _state.value = ScanState.Done(
-                            ScanResult(
-                                rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
-                                failed = emptyMap(),
-                                settings = settings
-                            ),
-                            scanned = ((i + 1) * chunk.size).coerceAtMost(total),
-                            total = total
-                        )
+                        // Snapshots drosseln: erste Meldung sofort, danach max. alle 200ms, letzte garantiert
+                        val now = currentTimeMs()
+                        val isLast = i == chunks.lastIndex
+                        if (isLast || now - lastEmit >= 200) {
+                            ensureActive() // abgebrochene Re-Scores dürfen keinen Status mehr schreiben
+                            lastEmit = now
+                            _state.value = ScanState.Done(
+                                ScanResult(
+                                    rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
+                                    failed = emptyMap(),
+                                    settings = settings
+                                ),
+                                scanned = ((i + 1) * chunk.size).coerceAtMost(total),
+                                total = total
+                            )
+                        }
                     }
                 } catch (e: CancellationException) {
                     throw e

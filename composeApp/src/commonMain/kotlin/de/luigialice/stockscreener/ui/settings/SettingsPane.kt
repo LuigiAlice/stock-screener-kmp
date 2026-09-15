@@ -77,9 +77,34 @@ internal fun SettingsPane(
         Spacer(Modifier.height(16.dp))
 
         Text("Scan-Modus", fontWeight = FontWeight.SemiBold)
+        fun applyMode(m: ScanMode) {
+            mode = m
+            val uni = activeUniverse ?: run {
+                val tickers = parseTickers(tickerText)
+                Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
+            }
+            if (state.isScanning) {
+                // Laufenden Download mit dem neuen Modus neu starten:
+                // bereits geladene Ticker kommen aus dem Cache und kosten keine Zeit
+                viewModel.runScan(
+                    uni,
+                    ScanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
+                    ScanSettings(minScore, onlyBelow12m, m),
+                    batchSize, pause, scope
+                )
+            } else {
+                val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
+                if (tickers.isEmpty()) return
+                viewModel.revalidate(
+                    ScanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
+                    ScanSettings(minScore, onlyBelow12m, m),
+                    tickers, batchSize, pause, scope
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScanMode.entries.forEach { m ->
-                TextButton(onClick = { mode = m }) {
+                TextButton(onClick = { applyMode(m) }) {
                     Text(m.label, color = if (mode == m) MaterialTheme.colorScheme.primary else Color.Gray)
                 }
             }

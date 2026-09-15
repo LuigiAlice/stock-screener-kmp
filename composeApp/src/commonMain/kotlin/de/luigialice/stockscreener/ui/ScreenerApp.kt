@@ -13,11 +13,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import de.luigialice.stockscreener.rememberScanViewModel
 import de.luigialice.stockscreener.ui.results.MainPane
 import de.luigialice.stockscreener.ui.settings.SettingsPane
@@ -27,6 +29,15 @@ fun ScreenerApp() {
     val scope = rememberCoroutineScope()
     val viewModel = rememberScanViewModel()
     val state by viewModel.state.collectAsState()
+
+    // Selbstheilung: partieller "Scanne …"-Zustand ohne aktiven Job nach 3s abschließen
+    LaunchedEffect(state) {
+        val s = state
+        if (s is ScanState.Done && s.isScanning) {
+            delay(3000)
+            viewModel.completeIfStuck(s)
+        }
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
