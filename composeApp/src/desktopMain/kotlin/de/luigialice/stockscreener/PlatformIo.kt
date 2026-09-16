@@ -42,6 +42,8 @@ actual fun pickCsvText(): String? {
     return runCatching { file.readText() }.getOrNull()
 }
 
+actual fun csvFileDialogsAvailable(): Boolean = true
+
 actual fun exportCsv(content: String) {
     val chooser = JFileChooser().apply {
         dialogTitle = "Treffer speichern"

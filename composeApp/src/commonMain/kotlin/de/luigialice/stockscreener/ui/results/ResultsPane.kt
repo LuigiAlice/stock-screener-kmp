@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.luigialice.stockscreener.csvFileDialogsAvailable
 import de.luigialice.stockscreener.exportCsv
 import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanMode
@@ -50,18 +51,23 @@ import de.luigialice.stockscreener.ui.fmtDate
 import de.luigialice.stockscreener.ui.results.buildImportedResult
 import de.luigialice.stockscreener.ui.results.parseHitsCsv
 
+/**
+ * UI-Zustand der Ergebnisansicht, der Scan-/Moduswechsel überleben soll
+ * (wird in MainPane gehalten, weil ResultsPane bei laufendem Scan die Komposition verlässt).
+ */
+internal class ResultsUiState {
+    var scoresByMode by mutableStateOf<Map<ScanMode, Int>>(emptyMap())
+    var selectedTicker by mutableStateOf<String?>(null)
+}
+
 @Composable
-internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
+internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: ResultsUiState) {
     val result = done.result
     val mode = result.settings.mode
     // Trefferfilter pro Scan-Modus gemerkter Zustand; initial = Mitte des Score-Bereichs
-    var scoresByMode by remember { mutableStateOf<Map<ScanMode, Int>>(emptyMap()) }
-    var displayScore = scoresByMode[mode] ?: ((mode.maxScore + 1) / 2)
-    fun setDisplayScore(v: Int) {
-        scoresByMode = scoresByMode + (mode to v)
-    }
+    val displayScore = ui.scoresByMode[mode] ?: ((mode.maxScore + 1) / 2)
     // Auswahl über Ticker statt Index, damit sie Re-Scores übersteht
-    var selectedTicker by remember { mutableStateOf<String?>(null) }
+    val selectedTicker = ui.selectedTicker
     val uriHandler = LocalUriHandler.current
     val hits = result.rows
         .filter { it.score >= displayScore }
@@ -71,7 +77,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
     // Pfeiltasten-Navigation: die ganze Ergebnis-Spalte hält den Fokus (Klicks in sie stehlen ihn nicht),
     // onKeyEvent (nicht Preview) damit Slider/Buttons Pfeiltasten vorab nutzen können
     val focusRequester = remember { FocusRequester() }
-    val onKey: (Int) -> Unit = { i -> selectedTicker = hits.getOrNull(i)?.ticker }
+    val onKey: (Int) -> Unit = { i -> ui.selectedTicker = hits.getOrNull(i)?.ticker }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val bounded = constraints.hasBoundedHeight
         Column(
@@ -103,7 +109,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
         SliderRow(
             "Trefferfilter (ohne neuen Scan)", "$displayScore",
             displayScore.toFloat(), 1f, result.settings.mode.maxScore.toFloat()
-        ) { setDisplayScore(it.toInt()) }
+        ) { ui.scoresByMode = ui.scoresByMode + (mode to it.toInt()) }
         Text(
             "Score = Anzahl erfüllter Kriterien (0–${result.settings.mode.maxScore}). " +
                 result.rows.firstOrNull()?.criteria?.keys?.joinToString(" · ").orEmpty(),
@@ -131,20 +137,24 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel) {
             ResultsTable(
                 hits,
                 selectedIndex = selectedIndex.coerceIn(0, hits.size - 1),
-                onSelect = { i -> selectedTicker = hits.getOrNull(i)?.ticker },
+                onSelect = { i -> ui.selectedTicker = hits.getOrNull(i)?.ticker },
                 uriHandler = uriHandler,
                 tableModifier = tableModifier
             )
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { exportCsv(result.rows.toCsv()) }) { Text("Alle Treffer als CSV herunterladen") }
-                TextButton(onClick = { exportCsv(hits.toCsv()) }) { Text("Nur sichtbare Treffer") }
-                ImportButton(viewModel)
+            if (csvFileDialogsAvailable()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { exportCsv(result.rows.toCsv()) }) { Text("Alle Treffer als CSV herunterladen") }
+                    TextButton(onClick = { exportCsv(hits.toCsv()) }) { Text("Nur sichtbare Treffer") }
+                    ImportButton(viewModel)
+                }
+            } else {
+                Text("CSV-Import/-Export nur am Desktop verfügbar", fontSize = 12.sp, color = Color.Gray)
             }
             HitChartSelector(
                 hits,
                 selectedIndex = selectedIndex,
-                onSelect = { i -> selectedTicker = hits.getOrNull(i)?.ticker },
+                onSelect = { i -> ui.selectedTicker = hits.getOrNull(i)?.ticker },
                 viewModel = viewModel,
                 chartModifier = chartModifier
             )

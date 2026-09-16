@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener
 
 import de.luigialice.stockscreener.data.BarCache
+import de.luigialice.stockscreener.data.currentTimeMs
 import de.luigialice.stockscreener.model.Bar
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -22,7 +23,7 @@ class BarCacheTest {
         closes.mapIndexed { i, c -> Bar(LocalDate(2026, 1, 1).plus(i, DateTimeUnit.DAY), c, 1000.0 * (i + 1)) }
 
     private fun cacheWithTtl(ttlMs: Long): Pair<BarCache, Path> {
-        val dir = (System.getProperty("java.io.tmpdir") + "/barcache-test-" + System.nanoTime()).toPath()
+        val dir = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "barcache-test-${currentTimeMs()}-${kotlin.random.Random.nextInt(100000)}"
         fs.deleteRecursively(dir)
         return BarCache(dir, ttlMs) to dir
     }
@@ -45,12 +46,12 @@ class BarCacheTest {
     }
 
     @Test
-    fun freshWithinTtlStaleAfterTtl() {
+    fun freshWithinTtlStaleAfterTtl() = kotlinx.coroutines.runBlocking {
         val (shortTtl, dir) = cacheWithTtl(50)
         val data = bars(100.0)
         shortTtl.store("MSFT", data)
         assertNotNull(shortTtl.freshBars("MSFT"))
-        Thread.sleep(80)
+        kotlinx.coroutines.delay(80)
         assertNull(shortTtl.freshBars("MSFT")) // abgelaufen
         assertNotNull(shortTtl.anyBars("MSFT")) // Rohdaten trotzdem da
         cleanup(dir)

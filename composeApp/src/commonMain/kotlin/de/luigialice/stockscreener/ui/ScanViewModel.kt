@@ -23,12 +23,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.Clock
 
 sealed interface ScanState {
     data object Idle : ScanState
@@ -63,21 +62,52 @@ class ScanViewModel(
     private var lastUniverse: Universe? = null
     private var lastApplied: Pair<ScanParams, ScanSettings>? = null
 
+    /** Letzter vollständig abgeschlossener Ergebnisstand (für Abbrechen ohne Datenverlust). */
+    private var lastCompleteState: ScanState.Done? = null
+
+    /** Fehlerursachen des letzten Download-Scans (bleibt beim lokalen Re-Score erhalten). */
+    private var lastFailed: Map<String, FailedReason> = emptyMap()
+
+    /**
+     * Lauf-Token: wird bei jedem neuen Scan/Re-Score/Load/Cancel erhöht.
+     * Emissionen eines überholten Laufs werden verworfen, damit ein abgebrochener
+     * Job keinen neueren (vollständigen) Stand mehr überschreiben kann.
+     */
+    private var runId = 0
+
+    /** Läuft gerade ein echter Download-Scan (nicht nur ein lokaler Re-Score)? */
+    private var downloadRunning = false
+
     fun cancel() {
+        val restore = if (!downloadRunning) lastCompleteState else null
+        runId++
+        downloadRunning = false
         job?.cancel()
-        _state.value = ScanState.Idle
+        barJobs.values.forEach { it.cancel() }
+        barJobs.clear()
+        // Abbrechen eines lokalen Re-Scores darf die vorhandene Ergebnisliste nicht löschen
+        _state.value = restore ?: ScanState.Idle
     }
 
     /** Ist gerade ein Scan/Re-Score-Job aktiv? */
     fun jobActive(): Boolean = job?.isActive == true
 
+    /** Läuft ein Download-Scan (Netzwerk) — im Unterschied zu einem lokalen Re-Score? */
+    fun downloadRunning(): Boolean = downloadRunning
+
     /**
-     * Selbstheilung: hängt der State in einem partiellen Done (isScanning) ohne aktiven Job
-     * (z. B. durch eine überholte Status-Emission), wird er abgeschlossen.
+     * Selbstheilung: hängt der State ohne aktiven Job (z. B. durch eine überholte
+     * Status-Emission oder ein leeres Universum), wird er in einen sauberen Stand gebracht.
      */
-    fun completeIfStuck(done: ScanState.Done) {
-        if (state.value === done && !jobActive()) {
-            _state.value = done.copy(scanned = done.total)
+    fun healIfStuck(snapshot: ScanState) {
+        if (state.value !== snapshot || jobActive()) return
+        when {
+            snapshot is ScanState.Done && snapshot.isScanning ->
+                _state.value = snapshot.copy(scanned = snapshot.total)
+            snapshot is ScanState.Running -> {
+                downloadRunning = false
+                _state.value = ScanState.Idle
+            }
         }
     }
 
@@ -88,6 +118,8 @@ class ScanViewModel(
 
     /** Ergebnissatz aus importierter Treffer-CSV anzeigen; Universum wird für Re-Score übernommen. */
     fun loadResults(result: ScanResult) {
+        runId++
+        downloadRunning = false
         job?.cancel()
         prices.value = emptyMap()
         val rows = result.rows
@@ -100,7 +132,10 @@ class ScanViewModel(
         lastUniverse = uni
         lastApplied = null
         val total = rows.size + result.failed.size
-        _state.value = ScanState.Done(result, scanned = total, total = total)
+        val done = ScanState.Done(result, scanned = total, total = total)
+        lastCompleteState = done
+        lastFailed = result.failed
+        _state.value = done
     }
 
     /** Bars für einen Ticker nachladen (z. B. nach Treffer-CSV-Import); Cache-first. */
@@ -112,7 +147,7 @@ class ScanViewModel(
                     ?: withContext(Dispatchers.Default) {
                         runCatching { api.fetchBars(ticker) }.getOrNull().also { if (!it.isNullOrEmpty()) barCache.store(ticker, it) }
                     }
-                if (!bars.isNullOrEmpty()) prices.value = prices.value + (ticker to bars)
+                if (!bars.isNullOrEmpty()) prices.update { it + (ticker to bars) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -131,10 +166,20 @@ class ScanViewModel(
         pauseSeconds: Int,
         scope: CoroutineScope
     ) {
+        if (universe.tickers.isEmpty()) {
+            runId++
+            downloadRunning = false
+            job?.cancel()
+            _state.value = ScanState.Failed("Kein Ticker im Universum angegeben")
+            return
+        }
+        runId++
+        val myRun = runId
         job?.cancel()
         lastUniverse = universe
         lastApplied = params to settings
         _universe.value = universe
+        downloadRunning = true
         _state.value = ScanState.Running(0, universe.tickers.size, "")
         prices.value = emptyMap()
         job = scope.launch {
@@ -144,7 +189,7 @@ class ScanViewModel(
                 val loadedPrices = mutableMapOf<String, List<Bar>>()
                 val total = universe.tickers.size
 
-                universe.tickers.chunked(batchSize).forEachIndexed { batchIndex, batch ->
+                universe.tickers.chunked(batchSize.coerceAtLeast(1)).forEachIndexed { batchIndex, batch ->
                     // Ticker eines Batches parallel laden; Batch-Größe = Parallelität; Cache-first
                     var networkFetches = 0
                     val batchResults: List<Pair<String, FetchOutcome>> = batch.map { ticker ->
@@ -178,10 +223,10 @@ class ScanViewModel(
                         }
                     }
 
-                    // Inkrementelles Zwischenergebnis nach jedem Batch
-                    ensureActive() // abgebrochene Scans dürfen keinen Status mehr schreiben
+                    // Inkrementelles Zwischenergebnis nach jedem Batch (nur für den aktuellen Lauf)
+                    if (!isCurrent(myRun)) return@launch
                     prices.value = loadedPrices.toMap()
-                    _state.value = ScanState.Done(
+                    val done = ScanState.Done(
                         ScanResult(
                             rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
                             failed = failed.toMap(),
@@ -190,6 +235,11 @@ class ScanViewModel(
                         scanned = rows.size + failed.size,
                         total = total
                     )
+                    if (done.scanned >= total) {
+                        lastFailed = failed.toMap()
+                        lastCompleteState = done
+                    }
+                    _state.value = done
 
                     // Pause nur wenn wirklich Netzwerklast war (Rate-Limiting-Schonung)
                     if (networkFetches > 0 && pauseSeconds > 0 && batchIndex < (total + batchSize - 1) / batchSize - 1) {
@@ -199,7 +249,9 @@ class ScanViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.value = ScanState.Failed(e.message ?: "Unbekannter Fehler")
+                if (isCurrent(myRun)) _state.value = ScanState.Failed(e.message ?: "Unbekannter Fehler")
+            } finally {
+                if (isCurrent(myRun)) downloadRunning = false
             }
         }
     }
@@ -209,7 +261,8 @@ class ScanViewModel(
      * - Kurse vorhanden → lokaler Re-Score ohne Netzwerk
      * - keine Kurse (z. B. nach Treffer-CSV-Import) → einmaliger Download-Scan des Universums,
      *   danach laufen weitere Regeländerungen instant
-     * Überspringen bei: unveränderten Regeln, abweichendem aktiven Universum, laufendem Scan.
+     * Überspringen bei: unveränderten Regeln, abweichendem aktiven Universum. Läuft gerade ein
+     * echter Download-Scan, entscheidet der Aufrufer (Neustart via runScan) — hier kein Eingriff.
      */
     fun revalidate(
         params: ScanParams,
@@ -221,15 +274,17 @@ class ScanViewModel(
     ) {
         val uni = lastUniverse ?: return
         if (uni.tickers != activeTickers) return // aktives Universum weicht vom gescannten ab
+        if (downloadRunning) return // echter Download läuft → der Scan erledigt das
         val signature = params to settings
         if (signature == lastApplied) return
-        if (state.value is ScanState.Running) return
         if (prices.value.isEmpty()) {
             runScan(uni, params, settings, batchSize, pauseSeconds, scope)
         } else {
+            runId++
+            val myRun = runId
             lastApplied = signature
             job?.cancel()
-            // Kein Running-Emit: ResultsPane bleibt in der Komposition (Slider/ Auswahl bleiben erhalten),
+            // Kein Running-Emit: ResultsPane bleibt in der Komposition (Slider/Auswahl bleiben erhalten),
             // die alten Ergebnisse bleiben sichtbar, bis der neue Stand fertig ist.
             // Fortschritt über Done-Snapshots pro Batch (isScanning zeigt den Balken).
             job = scope.launch {
@@ -247,32 +302,40 @@ class ScanViewModel(
                                 }
                             }
                         }
+                        if (!isCurrent(myRun)) return@launch
                         rows.addAll(chunkRows)
                         // Snapshots drosseln: erste Meldung sofort, danach max. alle 200ms, letzte garantiert
                         val now = currentTimeMs()
                         val isLast = i == chunks.lastIndex
                         if (isLast || now - lastEmit >= 200) {
-                            ensureActive() // abgebrochene Re-Scores dürfen keinen Status mehr schreiben
                             lastEmit = now
-                            _state.value = ScanState.Done(
+                            val done = ScanState.Done(
                                 ScanResult(
                                     rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
-                                    failed = emptyMap(),
+                                    // Fehlerursachen des Downloads beibehalten (nur Ticker dieses Universums)
+                                    failed = lastFailed.filterKeys { it in loaded },
                                     settings = settings
                                 ),
                                 scanned = ((i + 1) * chunk.size).coerceAtMost(total),
                                 total = total
                             )
+                            if (isLast) lastCompleteState = done
+                            _state.value = done
                         }
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    _state.value = ScanState.Failed(e.message ?: "Unbekannter Fehler")
+                    if (isCurrent(myRun)) _state.value = ScanState.Failed(e.message ?: "Unbekannter Fehler")
                 }
             }
         }
     }
+
+    private fun isCurrent(run: Int): Boolean = run == runId && job?.isActive != false
+
+    /** Sind bereits Kursdaten geladen (nicht-reaktiv, z. B. für Tests)? */
+    fun hasBars(): Boolean = prices.value.isNotEmpty()
 
     /** Bars als beobachtbaren State (recomponiert beim Nachladen). */
     @Composable

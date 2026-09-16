@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.luigialice.stockscreener.csvFileDialogsAvailable
 import de.luigialice.stockscreener.data.CsvUniverse
 import de.luigialice.stockscreener.data.UniverseDiscovery
 import de.luigialice.stockscreener.model.ScanMode
@@ -68,8 +69,12 @@ internal fun SettingsPane(
     var batchSize by remember { mutableStateOf(25) }
     var pause by remember { mutableStateOf(1) }
     var tickerText by remember { mutableStateOf(DEFAULT_TICKERS) }
-    var csvError by remember { mutableStateOf<String?>(null) }
     val activeUniverse by viewModel.universe.collectAsState()
+
+    fun paramsFor(m: ScanMode) = ScanParams(
+        m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()
+    )
+    fun settingsFor(m: ScanMode) = ScanSettings(minScore, onlyBelow12m, m)
 
     Column(modifier.padding(16.dp)) {
         Text("Rebound Screener", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -78,28 +83,17 @@ internal fun SettingsPane(
 
         Text("Scan-Modus", fontWeight = FontWeight.SemiBold)
         fun applyMode(m: ScanMode) {
+            val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
+            if (tickers.isEmpty()) return // nichts zu bewerten
             mode = m
-            val uni = activeUniverse ?: run {
-                val tickers = parseTickers(tickerText)
-                Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
-            }
-            if (state.isScanning) {
+            if (viewModel.downloadRunning()) {
                 // Laufenden Download mit dem neuen Modus neu starten:
                 // bereits geladene Ticker kommen aus dem Cache und kosten keine Zeit
-                viewModel.runScan(
-                    uni,
-                    ScanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
-                    ScanSettings(minScore, onlyBelow12m, m),
-                    batchSize, pause, scope
-                )
+                val uni = activeUniverse ?: Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
+                viewModel.runScan(uni, paramsFor(m), settingsFor(m), batchSize, pause, scope)
             } else {
-                val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
-                if (tickers.isEmpty()) return
-                viewModel.revalidate(
-                    ScanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
-                    ScanSettings(minScore, onlyBelow12m, m),
-                    tickers, batchSize, pause, scope
-                )
+                // lokaler Re-Score (auch wenn gerade ein Re-Score läuft: der neue überholt den alten)
+                viewModel.revalidate(paramsFor(m), settingsFor(m), tickers, batchSize, pause, scope)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -132,7 +126,11 @@ internal fun SettingsPane(
         Text("Universum", fontWeight = FontWeight.SemiBold)
         TextField(
             value = tickerText,
-            onValueChange = { tickerText = it },
+            onValueChange = { v ->
+                tickerText = v
+                // bearbeitete Ticker-Liste gilt wieder statt des geladenen Universums
+                if (activeUniverse != null && parseTickers(v) != activeUniverse?.tickers) viewModel.setUniverse(null)
+            },
             label = { Text("Ticker") },
             modifier = Modifier.fillMaxWidth().height(120.dp)
         )
@@ -141,7 +139,9 @@ internal fun SettingsPane(
         val discovery = remember { UniverseDiscovery() }
         var fetchingLabel by remember { mutableStateOf<String?>(null) }
 
+        val csvDialogs = csvFileDialogsAvailable()
         TextButton(
+            enabled = csvDialogs,
             onClick = {
                 pickCsvText()?.let { text ->
                     runCatching { CsvUniverse.parse(text) }
@@ -204,12 +204,7 @@ internal fun SettingsPane(
                     val tickers = parseTickers(tickerText)
                     Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
                 }
-                viewModel.runScan(
-                    uni,
-                    ScanParams(mode, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
-                    ScanSettings(minScore, onlyBelow12m, mode),
-                    batchSize, pause, scope
-                )
+                viewModel.runScan(uni, paramsFor(mode), settingsFor(mode), batchSize, pause, scope)
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Screener starten") }
@@ -218,15 +213,11 @@ internal fun SettingsPane(
         // ohne Kurse (z. B. nach Import) einmaliger Download-Scan des aktiven Universums
         val hasBars = viewModel.rememberHasBars()
         LaunchedEffect(mode, days, maxPerf, rsiRange, minVolume, onlyBelow12m, minScore, hasBars, activeUniverse, state.isScanning, tickerText) {
-            if (state.isScanning) return@LaunchedEffect
+            if (viewModel.downloadRunning()) return@LaunchedEffect // echter Download läuft
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return@LaunchedEffect
             delay(300.milliseconds) // Debounce bei Slider-Bewegungen
-            viewModel.revalidate(
-                ScanParams(mode, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()),
-                ScanSettings(minScore, onlyBelow12m, mode),
-                tickers, batchSize, pause, scope
-            )
+            viewModel.revalidate(paramsFor(mode), settingsFor(mode), tickers, batchSize, pause, scope)
         }
         if (state.isScanning) {
             TextButton(onClick = { viewModel.cancel() }) { Text("Abbrechen") }

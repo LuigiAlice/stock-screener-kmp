@@ -21,3 +21,5 @@ actual fun rememberScanViewModel(): ScanViewModel = remember { ScanViewModel() }
 actual fun pickCsvText(): String? = null
 
 actual fun exportCsv(content: String) = Unit
+
+actual fun csvFileDialogsAvailable(): Boolean = false

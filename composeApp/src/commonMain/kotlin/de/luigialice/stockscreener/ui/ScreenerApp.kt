@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import de.luigialice.stockscreener.rememberScanViewModel
 import de.luigialice.stockscreener.ui.results.MainPane
 import de.luigialice.stockscreener.ui.settings.SettingsPane
+import kotlinx.coroutines.delay
 
 @Composable
 fun ScreenerApp() {
@@ -30,12 +31,12 @@ fun ScreenerApp() {
     val viewModel = rememberScanViewModel()
     val state by viewModel.state.collectAsState()
 
-    // Selbstheilung: partieller "Scanne …"-Zustand ohne aktiven Job nach 3s abschließen
-    LaunchedEffect(state) {
-        val s = state
-        if (s is ScanState.Done && s.isScanning) {
+    // Selbstheilung: hängt ein "Scanne …"-Zustand ohne aktiven Job, nach 3s sauber abschließen
+    val scanning = state.isScanning
+    LaunchedEffect(scanning) {
+        if (scanning) {
             delay(3000)
-            viewModel.completeIfStuck(s)
+            viewModel.healIfStuck(viewModel.state.value)
         }
     }
 
