@@ -1,6 +1,8 @@
 package de.luigialice.stockscreener
 
+import de.luigialice.stockscreener.data.indexSymbol
 import de.luigialice.stockscreener.data.isCommonStock
+import de.luigialice.stockscreener.data.parseIndexTable
 import de.luigialice.stockscreener.data.parseNasdaqListed
 import de.luigialice.stockscreener.data.parseOtherListed
 import de.luigialice.stockscreener.data.parseSp500Csv
@@ -77,5 +79,49 @@ class UniverseDiscoveryTest {
         assertFalse(isCommonStock("ABC-P", "Preferred Test Inc"))
         assertFalse(isCommonStock("TOOLONG", "Too Long Name Inc"))
         assertFalse(isCommonStock("A\$B", "Dollar Test Inc"))
+    }
+
+    @Test
+    fun parsesIndexTableFromWikipediaHtml() {
+        // Struktur wie auf Wikipedia: Tabelle mit Ticker-/Firmenspalte, Fußnoten, Entitäten
+        val html = """
+            <table><tr><td>andere Tabelle ohne Symbolspalte</td></tr></table>
+            <table class="wikitable">
+              <tr><th id="a">Ticker</th><th id="b">Company</th><th id="c">Sector</th></tr>
+              <tr><td>ADS</td><td><a href="/wiki/Adidas">Adidas</a></td><td>Consumer</td></tr>
+              <tr><td>AIR.PA</td><td>Airbus<sup>[1]</sup></td><td>Industrials</td></tr>
+              <tr><td>ALV</td><td>Allianz SE</td><td>Financials</td></tr>
+              <tr><td>MRK</td><td>Merck KGaA &amp; Co.</td><td>Healthcare</td></tr>
+              <tr><td>RHM</td><td>Rheinmetall</td><td>Industrials</td></tr>
+            </table>
+        """.trimIndent()
+        val parsed = parseIndexTable(html)
+        assertEquals(5, parsed.size)
+        assertEquals("ADS" to "Adidas", parsed[0])
+        assertEquals("AIR.PA" to "Airbus", parsed[1])
+        assertEquals("Merck KGaA & Co.", parsed[3].second)
+    }
+
+    @Test
+    fun indexSymbolAppendsExchangeSuffixOnlyWhenMissing() {
+        assertEquals("ADS.DE", indexSymbol("ADS", ".DE"))
+        assertEquals("SAP.DE", indexSymbol("SAP.DE", ".DE")) // bereits vollständig
+        assertEquals("AIR.PA", indexSymbol("AIR.PA", ".DE")) // fremde Börse bleibt
+        assertEquals("AAPL", indexSymbol("AAPL", ""))         // US ohne Suffix
+    }
+
+    @Test
+    fun parseIndexTableIgnoresTablesWithoutSymbolColumn() {
+        val html = """
+            <table>
+              <tr><th>Logo</th><th>Name</th><th>Industry</th></tr>
+              <tr><td>x</td><td>A</td><td>B</td></tr>
+              <tr><td>x</td><td>C</td><td>D</td></tr>
+              <tr><td>x</td><td>E</td><td>F</td></tr>
+              <tr><td>x</td><td>G</td><td>H</td></tr>
+              <tr><td>x</td><td>I</td><td>J</td></tr>
+            </table>
+        """.trimIndent()
+        assertTrue(parseIndexTable(html).isEmpty())
     }
 }

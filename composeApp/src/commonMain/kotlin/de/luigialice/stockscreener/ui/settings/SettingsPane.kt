@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RangeSlider
@@ -140,56 +143,74 @@ internal fun SettingsPane(
         var fetchingLabel by remember { mutableStateOf<String?>(null) }
 
         val csvDialogs = csvFileDialogsAvailable()
-        TextButton(
-            enabled = csvDialogs,
-            onClick = {
-                pickCsvText()?.let { text ->
-                    runCatching { CsvUniverse.parse(text) }
-                        .onSuccess {
-                            viewModel.setUniverse(it)
-                            tickerText = it.tickers.joinToString(" ")
-                            csvError = null
-                        }
-                        .onFailure { csvError = "CSV konnte nicht gelesen werden: ${it.message}" }
-                }
+        var menuOpen by remember { mutableStateOf(false) }
+
+        fun loadUniverse(label: String, fetch: suspend () -> Universe) {
+            fetchingLabel = label
+            scope.launch {
+                runCatching { fetch() }
+                    .onSuccess { uni ->
+                        viewModel.setUniverse(uni)
+                        tickerText = uni.tickers.joinToString(" ")
+                        csvError = null
+                    }
+                    .onFailure { e -> csvError = "$label fehlgeschlagen: ${e.message}" }
+                fetchingLabel = null
             }
-        ) { Text("CSV-Datei laden (ticker, name, exchange)") }
-        TextButton(
-            enabled = fetchingLabel == null,
-            onClick = {
-                fetchingLabel = "Ermittle US-Aktien …"
-                scope.launch {
-                    runCatching { discovery.discoverUniverse() }
-                        .onSuccess { uni ->
-                            viewModel.setUniverse(uni)
-                            tickerText = uni.tickers.joinToString(" ")
-                            csvError = null
-                        }
-                        .onFailure { e ->
-                            csvError = "Aktien-Ermittlung fehlgeschlagen: ${e.message}"
-                        }
-                    fetchingLabel = null
-                }
+        }
+
+        fun loadFromCsvFile() {
+            pickCsvText()?.let { text ->
+                runCatching { CsvUniverse.parse(text) }
+                    .onSuccess {
+                        viewModel.setUniverse(it)
+                        tickerText = it.tickers.joinToString(" ")
+                        csvError = null
+                    }
+                    .onFailure { csvError = "CSV konnte nicht gelesen werden: ${it.message}" }
             }
-        ) { Text(if (fetchingLabel == "Ermittle US-Aktien …") "Ermittle US-Aktien …" else "US-Aktien automatisch ermitteln") }
-        TextButton(
-            enabled = fetchingLabel == null,
-            onClick = {
-                fetchingLabel = "Lade S&P 500 …"
-                scope.launch {
-                    runCatching { discovery.discoverSp500() }
-                        .onSuccess { uni ->
-                            viewModel.setUniverse(uni)
-                            tickerText = uni.tickers.joinToString(" ")
-                            csvError = null
-                        }
-                        .onFailure { e ->
-                            csvError = "S&P 500 laden fehlgeschlagen: ${e.message}"
-                        }
-                    fetchingLabel = null
-                }
+        }
+
+        Box {
+            Button(
+                enabled = fetchingLabel == null,
+                onClick = { menuOpen = true },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(fetchingLabel ?: "Universum laden …") }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Kompletter US-Markt (NASDAQ/NYSE/AMEX)") },
+                    onClick = { menuOpen = false; loadUniverse("Ermittle US-Aktien …") { discovery.discoverUniverse() } }
+                )
+                DropdownMenuItem(
+                    text = { Text("S&P 500 (~500 Large Caps)") },
+                    onClick = { menuOpen = false; loadUniverse("Lade S&P 500 …") { discovery.discoverSp500() } }
+                )
+                DropdownMenuItem(
+                    text = { Text("Nasdaq 100") },
+                    onClick = { menuOpen = false; loadUniverse("Lade Nasdaq 100 …") { discovery.discoverNasdaq100() } }
+                )
+                DropdownMenuItem(
+                    text = { Text("Dow Jones (30)") },
+                    onClick = { menuOpen = false; loadUniverse("Lade Dow Jones …") { discovery.discoverDowJones() } }
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("DAX (40, XETRA)") },
+                    onClick = { menuOpen = false; loadUniverse("Lade DAX …") { discovery.discoverDax() } }
+                )
+                DropdownMenuItem(
+                    text = { Text("MDAX (XETRA)") },
+                    onClick = { menuOpen = false; loadUniverse("Lade MDAX …") { discovery.discoverMdax() } }
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(if (csvDialogs) "CSV-Datei laden … (ticker, name, exchange)" else "CSV-Import nur am Desktop") },
+                    enabled = csvDialogs,
+                    onClick = { menuOpen = false; loadFromCsvFile() }
+                )
             }
-        ) { Text(if (fetchingLabel == "Lade S&P 500 …") "Lade S&P 500 …" else "S&P 500 laden (~500 Large Caps)") }
+        }
         csvError?.let { Text(it, fontSize = 12.sp, color = red) }
         activeUniverse?.let { Text("Universum aktiv: ${it.tickers.size} Aktien", fontSize = 12.sp, color = green) }
         HorizontalDivider()

@@ -53,15 +53,100 @@ class UniverseDiscovery(private val client: HttpClient = createYahooClient()) {
         )
     }
 
-    private suspend fun fetchLines(url: String): List<String> {
+    /** Nasdaq-100 (US, ohne Suffix); Komponentenliste ist ein eigener Artikel. */
+    suspend fun discoverNasdaq100(): Universe =
+        discoverWikipedia("https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies", "", "Nasdaq 100")
+
+    /** Dow Jones Industrial Average (US, ohne Suffix); Komponentenliste ist ein eigener Artikel. */
+    suspend fun discoverDowJones(): Universe =
+        discoverWikipedia("https://en.wikipedia.org/wiki/List_of_Dow_Jones_Industrial_Average_companies", "", "Dow Jones")
+
+    /** DAX (XETRA, Yahoo-Suffix .DE). */
+    suspend fun discoverDax(): Universe =
+        discoverWikipedia("https://en.wikipedia.org/wiki/DAX", ".DE", "DAX")
+
+    /** MDAX (XETRA, Yahoo-Suffix .DE). */
+    suspend fun discoverMdax(): Universe =
+        discoverWikipedia("https://en.wikipedia.org/wiki/MDAX", ".DE", "MDAX")
+
+    private suspend fun discoverWikipedia(url: String, suffix: String, label: String): Universe {
+        val entries = parseIndexTable(fetchText(url))
+            .map { (symbol, name) -> indexSymbol(symbol, suffix) to name }
+            .toMap()
+
+        if (entries.isEmpty()) error("Keine Aktien für $label gefunden")
+
+        return Universe(
+            tickers = entries.keys.sorted(),
+            names = entries,
+            exchanges = entries.mapValues { "" }
+        )
+    }
+
+    private suspend fun fetchLines(url: String): List<String> = fetchText(url).lines()
+
+    private suspend fun fetchText(url: String): String {
         val response = client.get(url) { header("User-Agent", "Mozilla/5.0") }
         if (!response.status.isSuccess()) error("HTTP ${response.status.value} für $url")
-        return response.bodyAsText().lines()
+        return response.bodyAsText()
     }
 }
 
 /** Yahoo-Format: Klassenshares "BRK.B" -> "BRK-B" */
 internal fun symbolToYahoo(symbol: String): String = symbol.replace(".", "-")
+
+/**
+ * Index-Ticker + Börsensuffix: "ADS" + ".DE" -> "ADS.DE";
+ * enthält der Ticker schon einen Punkt (z. B. "SAP.DE"), bleibt er unverändert.
+ */
+internal fun indexSymbol(symbol: String, suffix: String): String =
+    if (symbol.contains('.') || suffix.isEmpty()) symbol else symbol + suffix
+
+private val tagsRegex = Regex("<[^>]*>")
+private val refRegex = Regex("\\[\\s*\\d+\\s*]")
+private val cellRegex = Regex("<t([dh])[^>]*>([\\s\\S]*?)</t\\1>", RegexOption.IGNORE_CASE)
+private val rowRegex = Regex("<tr[^>]*>([\\s\\S]*?)</tr>", RegexOption.IGNORE_CASE)
+private val tableRegex = Regex("<table[^>]*>([\\s\\S]*?)</table>", RegexOption.IGNORE_CASE)
+
+private fun cleanCell(html: String): String =
+    html.replace(tagsRegex, " ")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&#160;", " ")
+        .replace(refRegex, "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+/**
+ * Liest aus einer Wikipedia-Seite die erste Tabelle mit Ticker-/Symbol-Spalte
+ * und liefert (Ticker, Firmenname)-Paare.
+ */
+internal fun parseIndexTable(html: String, symbolKeywords: List<String> = listOf("ticker", "symbol")): List<Pair<String, String>> {
+    for (table in tableRegex.findAll(html)) {
+        val rows = rowRegex.findAll(table.groupValues[1]).map { it.groupValues[1] }.toList()
+        if (rows.size < 5) continue
+
+        val header = cellRegex.findAll(rows.first()).map { cleanCell(it.groupValues[2]) }.toList()
+        val symbolIdx = header.indexOfFirst { h -> symbolKeywords.any { h.lowercase().contains(it) } }
+        if (symbolIdx < 0) continue
+        val nameIdx = header.indexOfFirst { h ->
+            val l = h.lowercase()
+            l.contains("company") || l.contains("name") || l.contains("unternehmen")
+        }.takeIf { it >= 0 } ?: 0
+
+        val entries = rows.drop(1).mapNotNull { row ->
+            val cells = cellRegex.findAll(row).map { cleanCell(it.groupValues[2]) }.toList()
+            if (cells.size <= maxOf(symbolIdx, nameIdx)) return@mapNotNull null
+            val symbol = cells[symbolIdx]
+            val name = cells[nameIdx]
+            if (symbol.isBlank() || name.isBlank()) return@mapNotNull null
+            symbol to name
+        }
+        val distinct = entries.distinctBy { it.first }
+        if (distinct.size >= 5) return distinct
+    }
+    return emptyList()
+}
 
 /** Spalten: Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares */
 internal fun parseNasdaqListed(lines: List<String>): List<Pair<String, String>> =
