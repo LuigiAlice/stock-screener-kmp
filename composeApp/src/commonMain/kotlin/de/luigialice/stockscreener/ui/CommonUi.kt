@@ -71,7 +71,7 @@ internal fun SliderRow(label: String, valueText: String, value: Float, min: Floa
 internal fun Metric(label: String, value: String) {
     Column {
         Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(label, fontSize = 12.sp, color = Color.Gray)
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

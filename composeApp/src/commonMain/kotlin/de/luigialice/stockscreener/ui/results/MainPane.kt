@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,13 +30,13 @@ internal fun MainPane(state: ScanState, viewModel: ScanViewModel, modifier: Modi
     Column(modifier.padding(16.dp)) {
         when (val s = state) {
             is ScanState.Idle -> {
-                Text("Aktien-Universum wählen (CSV, automatisch oder S&P 500) und dann „Screener starten“.", color = Color.Gray)
+                Text("Aktien-Universum wählen (CSV, automatisch oder S&P 500) und dann „Screener starten“.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (csvFileDialogsAvailable()) {
                     Spacer(Modifier.height(12.dp))
                     ImportButton(viewModel)
                     Text(
                         "Alternativ: Trefferliste aus einem früheren Lauf als CSV importieren.",
-                        fontSize = 12.sp, color = Color.Gray
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -50,6 +50,9 @@ import de.luigialice.stockscreener.ui.chart.LineChart
 import de.luigialice.stockscreener.ui.fmtDate
 import de.luigialice.stockscreener.ui.results.buildImportedResult
 import de.luigialice.stockscreener.ui.results.parseHitsCsv
+import de.luigialice.stockscreener.ui.theme.AppColors
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.minus
 
 /**
  * UI-Zustand der Ergebnisansicht, der Scan-/Moduswechsel überleben soll
@@ -113,7 +116,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
         Text(
             "Score = Anzahl erfüllter Kriterien (0–${result.settings.mode.maxScore}). " +
                 result.rows.firstOrNull()?.criteria?.keys?.joinToString(" · ").orEmpty(),
-            fontSize = 12.sp, color = Color.Gray
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (result.failed.isNotEmpty()) {
             val rateLimited = result.failed.count { it.value == FailedReason.RATE_LIMITED }
@@ -126,13 +129,13 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
                         if (network > 0) "Netzwerkfehler: $network" else null,
                         if (noData > 0) "keine Kursdaten: $noData" else null
                     ).joinToString(" · "),
-                fontSize = 12.sp, color = Color(0xFFB45309)
+                fontSize = 12.sp, color = AppColors.warn
             )
         }
         Spacer(Modifier.height(8.dp))
         Text("Treffer (${hits.size})", fontWeight = FontWeight.SemiBold)
         if (hits.isEmpty()) {
-            Text("Keine Treffer. Trefferfilter senken oder Regeln anpassen.", color = Color.Gray)
+            Text("Keine Treffer. Trefferfilter senken oder Regeln anpassen.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             ResultsTable(
                 hits,
@@ -149,7 +152,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
                     ImportButton(viewModel)
                 }
             } else {
-                Text("CSV-Import/-Export nur am Desktop verfügbar", fontSize = 12.sp, color = Color.Gray)
+                Text("CSV-Import/-Export nur am Desktop verfügbar", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HitChartSelector(
                 hits,
@@ -179,7 +182,7 @@ internal fun ImportButton(viewModel: ScanViewModel) {
                 }
             }
         }) { Text("Treffer-CSV importieren") }
-        importError?.let { Text(it, fontSize = 12.sp, color = Color(0xFFB45309)) }
+        importError?.let { Text(it, fontSize = 12.sp, color = AppColors.warn) }
     }
 }
 
@@ -210,11 +213,15 @@ private fun HitChartSelector(
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
-    if (bars.isNotEmpty()) {
+    val lastDate = bars.lastOrNull()?.date
+    val chartBars = remember(bars) {
+        if (lastDate == null) bars else bars.filter { it.date >= lastDate.minus(DatePeriod(years = 1)) }
+    }
+    if (chartBars.isNotEmpty()) {
         LineChart(
-            bars,
+            chartBars,
             chartModifier,
-            title = "${selected.ticker} · ${selected.name} · ${fmtDate(bars.first().date)} – ${fmtDate(bars.last().date)}"
+            title = "${selected.ticker} · ${selected.name} · ${fmtDate(chartBars.first().date)} – ${fmtDate(chartBars.last().date)}"
         )
     }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {

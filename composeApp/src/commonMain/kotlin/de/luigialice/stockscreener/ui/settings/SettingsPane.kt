@@ -29,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,8 +79,8 @@ internal fun SettingsPane(
     fun settingsFor(m: ScanMode) = ScanSettings(minScore, onlyBelow12m, m)
 
     Column(modifier.padding(16.dp)) {
-        Text("Rebound Screener", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text("Kein Kaufsignal, keine Anlageberatung.", fontSize = 12.sp, color = Color.Gray)
+        Text("Rebound Screener", style = MaterialTheme.typography.titleLarge)
+        Text("Kein Kaufsignal, keine Anlageberatung.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(16.dp))
 
         Text("Scan-Modus", fontWeight = FontWeight.SemiBold)
@@ -102,7 +101,7 @@ internal fun SettingsPane(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScanMode.entries.forEach { m ->
                 TextButton(onClick = { applyMode(m) }) {
-                    Text(m.label, color = if (mode == m) MaterialTheme.colorScheme.primary else Color.Gray)
+                    Text(m.label, color = if (mode == m) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -116,8 +115,8 @@ internal fun SettingsPane(
             RangeSlider(rsiRange, valueRange = 10f..70f, onValueChange = { rsiRange = it })
             SliderRow("Min. relatives Volumen", fmt(minVolume.toDouble(), 1), minVolume, 0.5f, 4f) { minVolume = it }
         } else {
-            Text("RSI-Bereich: 45 – 65 (fest)", fontSize = 12.sp, color = Color.Gray)
-            Text("Kriterien: 12M-Verlierer, über SMA20/SMA50, höheres Tief, RSI im Band.", fontSize = 12.sp, color = Color.Gray)
+            Text("RSI-Bereich: 45 – 65 (fest)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Kriterien: 12M-Verlierer, über SMA20/SMA50, höheres Tief, RSI im Band.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = onlyBelow12m, onCheckedChange = { onlyBelow12m = it })

@@ -1,5 +1,6 @@
 package de.luigialice.stockscreener.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,8 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,10 +19,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import de.luigialice.stockscreener.rememberScanViewModel
 import de.luigialice.stockscreener.ui.results.MainPane
 import de.luigialice.stockscreener.ui.settings.SettingsPane
+import de.luigialice.stockscreener.ui.theme.AppBackground
+import de.luigialice.stockscreener.ui.theme.AppColors
+import de.luigialice.stockscreener.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
 @Composable
@@ -40,22 +42,29 @@ fun ScreenerApp() {
         }
     }
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth >= 700.dp) {
-                Row(Modifier.fillMaxSize()) {
-                    SettingsPane(
-                        state, viewModel, scope,
-                        Modifier.width(360.dp).fillMaxHeight().verticalScroll(rememberScrollState())
-                    )
-                    MainPane(state, viewModel, Modifier.weight(1f))
-                }
-            } else {
-                // Schmales Layout (Handy): alles in einem gemeinsamen Scroll, Panes selbst nicht scrollend
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    SettingsPane(state, viewModel, scope, Modifier.fillMaxWidth())
-                    HorizontalDivider()
-                    MainPane(state, viewModel, Modifier.fillMaxWidth())
+    AppTheme {
+        AppBackground(Modifier.fillMaxSize()) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                if (maxWidth >= 700.dp) {
+                    Row(Modifier.fillMaxSize()) {
+                        SettingsPane(
+                            state, viewModel, scope,
+                            Modifier
+                                .width(360.dp)
+                                .fillMaxHeight()
+                                .background(AppColors.panel)
+                                .verticalScroll(rememberScrollState())
+                        )
+                        VerticalDivider(color = AppColors.panelEdge)
+                        MainPane(state, viewModel, Modifier.weight(1f))
+                    }
+                } else {
+                    // Schmales Layout (Handy): alles in einem gemeinsamen Scroll, Panes selbst nicht scrollend
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        SettingsPane(state, viewModel, scope, Modifier.fillMaxWidth().background(AppColors.panel))
+                        HorizontalDivider(color = AppColors.panelEdge)
+                        MainPane(state, viewModel, Modifier.fillMaxWidth())
+                    }
                 }
             }
         }
