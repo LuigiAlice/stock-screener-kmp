@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.luigialice.stockscreener.csvFileDialogsAvailable
+import de.luigialice.stockscreener.data.BarStore
+import de.luigialice.stockscreener.data.createSettingsStore
 import de.luigialice.stockscreener.exportCsv
 import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanMode
@@ -54,22 +60,55 @@ import de.luigialice.stockscreener.ui.results.parseHitsCsv
 import de.luigialice.stockscreener.ui.theme.AppColors
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.minus
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * UI-Zustand der Ergebnisansicht, der Scan-/Moduswechsel überleben soll
  * (wird in MainPane gehalten, weil ResultsPane bei laufendem Scan die Komposition verlässt).
  */
-internal class ResultsUiState {
-    var scoresByMode by mutableStateOf<Map<ScanMode, Int>>(emptyMap())
+/**
+ * UI-Zustand der Ergebnis-Ansicht (wird in MainPane gehalten, weil ResultsPane
+ * bei laufendem Scan die Komposition verlässt). Die Trefferfilter-Position wird
+ * je Scan-Modus dauerhaft gemerkt (localStorage im Browser, Datei auf Desktop).
+ */
+internal class ResultsUiState(private val prefs: BarStore? = createSettingsStore()) {
+    var scoresByMode by mutableStateOf(loadScores(prefs))
     var selectedTicker by mutableStateOf<String?>(null)
+
+    /** Trefferfilter-Position für den Modus merken und dauerhaft speichern. */
+    fun rememberScore(mode: ScanMode, score: Int) {
+        scoresByMode = scoresByMode + (mode to score.coerceIn(1, mode.maxScore))
+        runCatching {
+            prefs?.save(
+                SCORES_KEY,
+                prefsJson.encodeToString(FilterPositions.serializer(), FilterPositions(scoresByMode.mapKeys { it.key.name }))
+            )
+        }
+    }
+}
+
+internal const val SCORES_KEY = "trefferfilter"
+
+private val prefsJson = Json { ignoreUnknownKeys = true }
+
+@Serializable
+private data class FilterPositions(val positions: Map<String, Int> = emptyMap())
+
+private fun loadScores(prefs: BarStore?): Map<ScanMode, Int> {
+    val raw = prefs?.load(SCORES_KEY) ?: return emptyMap()
+    val parsed = runCatching { prefsJson.decodeFromString(FilterPositions.serializer(), raw) }.getOrNull() ?: return emptyMap()
+    return parsed.positions.mapNotNull { (name, score) ->
+        ScanMode.entries.firstOrNull { it.name == name }?.let { it to score.coerceIn(1, it.maxScore) }
+    }.toMap()
 }
 
 @Composable
 internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: ResultsUiState) {
     val result = done.result
     val mode = result.settings.mode
-    // Trefferfilter pro Scan-Modus gemerkter Zustand; initial = Mitte des Score-Bereichs
-    val displayScore = ui.scoresByMode[mode] ?: ((mode.maxScore + 1) / 2)
+    // Trefferfilter pro Scan-Modus gemerkter Zustand; initial = Mindest-Score des Scans
+    val displayScore = ui.scoresByMode[mode] ?: result.settings.scoreMin.coerceIn(1, mode.maxScore)
     // Auswahl über Ticker statt Index, damit sie Re-Scores übersteht
     val selectedTicker = ui.selectedTicker
     val uriHandler = LocalUriHandler.current
@@ -113,7 +152,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
         SliderRow(
             "Trefferfilter (ohne neuen Scan)", "$displayScore",
             displayScore.toFloat(), 1f, result.settings.mode.maxScore.toFloat()
-        ) { ui.scoresByMode = ui.scoresByMode + (mode to it.toInt()) }
+        ) { ui.rememberScore(mode, it.toInt()) }
         DimText(
             "Score = Anzahl erfüllter Kriterien (0–${result.settings.mode.maxScore}). " +
                 result.rows.firstOrNull()?.criteria?.keys?.joinToString(" · ").orEmpty()
@@ -205,8 +244,14 @@ private fun HitChartSelector(
     LaunchedEffect(selected.ticker) { viewModel.loadBars(selected.ticker, scope) }
 
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { onSelect(index - 1) }, enabled = index > 0) { Text("◀ Zurück") }
-        Button(onClick = { onSelect(index + 1) }, enabled = index < hits.size - 1) { Text("Weiter ▶") }
+        Button(onClick = { onSelect(index - 1) }, enabled = index > 0) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+            Text("Zurück")
+        }
+        Button(onClick = { onSelect(index + 1) }, enabled = index < hits.size - 1) {
+            Text("Weiter")
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.padding(start = 6.dp))
+        }
         Text(
             "${index + 1}/${hits.size} — ${selected.ticker} · ${selected.name}",
             fontWeight = FontWeight.SemiBold,

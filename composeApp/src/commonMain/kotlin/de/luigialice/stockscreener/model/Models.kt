@@ -18,6 +18,28 @@ data class ScanParams(
     val minVolume: Double = 1.3
 )
 
+/** Fester RSI-Bereich des Modus "Laufende Erholung" (nicht einstellbar). */
+val ONGOING_RSI_BAND: ClosedFloatingPointRange<Double> = 45.0..65.0
+
+/**
+ * ScanParameter je Modus: für "Laufende Erholung" ist der RSI-Bereich fest
+ * ([ONGOING_RSI_BAND]), die Regler des Rebound-Modus (Tage, max. Performance,
+ * relatives Volumen) werden dort nicht verwendet.
+ */
+fun scanParams(
+    mode: ScanMode,
+    days: Int,
+    maxPerf: Double,
+    rsiMin: Double,
+    rsiMax: Double,
+    minVolume: Double,
+): ScanParams = when (mode) {
+    ScanMode.REBOUND_START ->
+        ScanParams(mode, days, maxPerf, rsiMin, rsiMax, minVolume)
+    ScanMode.ONGOING_RECOVERY ->
+        ScanParams(mode, rsiMin = ONGOING_RSI_BAND.start, rsiMax = ONGOING_RSI_BAND.endInclusive)
+}
+
 data class ScanRow(
     val ticker: String,
     val name: String,

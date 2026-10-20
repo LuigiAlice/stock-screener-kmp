@@ -34,6 +34,9 @@ import de.luigialice.stockscreener.ui.red
 
 private val HEADER_WIDTHS = listOf(70, 170, 60, 70, 60, 50, 60, 60, 60)
 
+/** Breite der Kriteriums-Spalten – passt zum längsten Kriteriumsnamen in einer Zeile. */
+private const val CRITERION_WIDTH = 100
+
 @Composable
 internal fun ResultsTable(
     rows: List<ScanRow>,
@@ -45,12 +48,12 @@ internal fun ResultsTable(
     Column(tableModifier.horizontalScroll(rememberScrollState())) {
         Row(Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
             listOf("Ticker", "Aktienname", "Kurs", "Perf %", "12M %", "RSI", "relVol", "SMA20 %", "SMA50 %").forEachIndexed { i, h ->
-                Cell(h, HEADER_WIDTHS[i], bold = true)
+                Cell(h, HEADER_WIDTHS[i], bold = true, singleLine = true)
             }
-            rows.firstOrNull()?.criteria?.keys?.forEach { Cell(it, 64, bold = true) }
-            Cell("Score", 70, bold = true)
-            Cell("Tag", 90, bold = true)
-            Cell("Links", 130, bold = true)
+            rows.firstOrNull()?.criteria?.keys?.forEach { Cell(it, CRITERION_WIDTH, bold = true, singleLine = true) }
+            Cell("Score", 70, bold = true, singleLine = true)
+            Cell("Tag", 90, bold = true, singleLine = true)
+            Cell("Links", 130, bold = true, singleLine = true)
         }
         val listState = rememberLazyListState()
     // Auswahl nachführen: nur scrollen, wenn die Zeile nicht (voll) sichtbar ist
@@ -87,7 +90,7 @@ internal fun ResultsTable(
                             if (value) "Ja" else "Nein",
                             color = if (value) green else red,
                             fontSize = 12.sp,
-                            modifier = Modifier.width(64.dp).padding(horizontal = 4.dp, vertical = 6.dp)
+                            modifier = Modifier.width(CRITERION_WIDTH.dp).padding(horizontal = 4.dp, vertical = 6.dp)
                         )
                     }
                     Column(Modifier.width(70.dp)) {
@@ -111,11 +114,12 @@ internal fun ResultsTable(
 }
 
 @Composable
-private fun Cell(text: String, width: Int, bold: Boolean = false) {
+private fun Cell(text: String, width: Int, bold: Boolean = false, singleLine: Boolean = false) {
     Text(
         text,
         fontSize = 12.sp,
         fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+        maxLines = if (singleLine) 1 else Int.MAX_VALUE,
         modifier = Modifier.width(width.dp).padding(horizontal = 4.dp, vertical = 6.dp)
     )
 }

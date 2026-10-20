@@ -11,9 +11,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import de.luigialice.stockscreener.data.BarCache
 import de.luigialice.stockscreener.data.InMemoryBarStore
+import de.luigialice.stockscreener.model.ScanMode
+import de.luigialice.stockscreener.model.ScanSettings
 import de.luigialice.stockscreener.ui.ScanState
 import de.luigialice.stockscreener.ui.ScanViewModel
 import de.luigialice.stockscreener.ui.results.MainPane
+import de.luigialice.stockscreener.ui.results.ResultsUiState
 import de.luigialice.stockscreener.ui.results.buildImportedResult
 import de.luigialice.stockscreener.ui.theme.AppTheme
 import kotlin.test.Test
@@ -23,35 +26,40 @@ class MainPaneTest {
 
     private fun tempCache(): BarCache = BarCache(InMemoryBarStore(), 60 * 60 * 1000)
 
+    /** Sauberer Settings-Store, damit Tests nicht am lokalen Trefferfilter hängen. */
+    private fun cleanUi(): ResultsUiState = ResultsUiState(InMemoryBarStore())
+
     /** Wie in der App: MainPane sitzt immer in begrenztem Raum (BoxWithConstraints der Results-Spalte). */
     private fun paneModifier(): Modifier = Modifier.fillMaxWidth().height(700.dp)
 
     @Test
     fun idleShowsGuidance() = runSkikoComposeUiTest(size = Size(1600f, 900f)) {
         val vm = ScanViewModel(barCache = tempCache())
-        setContent { AppTheme { MainPane(ScanState.Idle, vm, paneModifier()) } }
+        setContent { AppTheme { MainPane(ScanState.Idle, vm, cleanUi(), paneModifier()) } }
         onNodeWithText("Aktien-Universum wählen", substring = true).assertExists()
     }
 
     @Test
     fun runningShowsProgress() = runSkikoComposeUiTest(size = Size(1600f, 900f)) {
         val vm = ScanViewModel(barCache = tempCache())
-        setContent { AppTheme { MainPane(ScanState.Running(3, 10, "AAPL"), vm, paneModifier()) } }
+        setContent { AppTheme { MainPane(ScanState.Running(3, 10, "AAPL"), vm, cleanUi(), paneModifier()) } }
         onNodeWithText("Scanne … 3/10 (AAPL)").assertExists()
     }
 
     @Test
     fun failureShowsTheMessage() = runSkikoComposeUiTest(size = Size(1600f, 900f)) {
         val vm = ScanViewModel(barCache = tempCache())
-        setContent { AppTheme { MainPane(ScanState.Failed("Boom"), vm, paneModifier()) } }
+        setContent { AppTheme { MainPane(ScanState.Failed("Boom"), vm, cleanUi(), paneModifier()) } }
         onNodeWithText("Scan fehlgeschlagen: Boom").assertExists()
     }
 
     @Test
     fun doneWithoutHitsInvitesToRelaxTheFilter() = runSkikoComposeUiTest(size = Size(1600f, 900f)) {
         val vm = ScanViewModel(barCache = tempCache())
+        // Mindest-Score des Scans (5) liegt über dem Row-Score (2) -> keine Treffer
         val result = buildImportedResult(listOf(sampleRow("AAPL", score = 2)))
-        setContent { AppTheme { MainPane(ScanState.Done(result), vm, paneModifier()) } }
+            .copy(settings = ScanSettings(scoreMin = 5, onlyBelow12m = false, mode = ScanMode.REBOUND_START))
+        setContent { AppTheme { MainPane(ScanState.Done(result), vm, cleanUi(), paneModifier()) } }
         onNodeWithText("Treffer (0)").assertExists()
         onNodeWithText("Keine Treffer. Trefferfilter senken oder Regeln anpassen.").assertExists()
     }
@@ -63,7 +71,7 @@ class MainPaneTest {
         cache.store("MSFT", sampleBars())
         val vm = ScanViewModel(barCache = cache)
         val result = buildImportedResult(listOf(sampleRow("AAPL", "Apple Inc", score = 6), sampleRow("MSFT", "Microsoft", score = 7)))
-        setContent { AppTheme { MainPane(ScanState.Done(result), vm, paneModifier()) } }
+        setContent { AppTheme { MainPane(ScanState.Done(result), vm, cleanUi(), paneModifier()) } }
         onNodeWithText("Geprüfte Aktien").assertExists()
         onNodeWithText("AAPL").assertExists()
         onNodeWithText("Microsoft").assertExists()

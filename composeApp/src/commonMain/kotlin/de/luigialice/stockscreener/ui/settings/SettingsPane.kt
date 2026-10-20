@@ -35,10 +35,11 @@ import androidx.compose.ui.unit.sp
 import de.luigialice.stockscreener.csvFileDialogsAvailable
 import de.luigialice.stockscreener.data.CsvUniverse
 import de.luigialice.stockscreener.data.UniverseDiscovery
+import de.luigialice.stockscreener.model.ONGOING_RSI_BAND
 import de.luigialice.stockscreener.model.ScanMode
-import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanSettings
 import de.luigialice.stockscreener.model.Universe
+import de.luigialice.stockscreener.model.scanParams
 import de.luigialice.stockscreener.pickCsvText
 import de.luigialice.stockscreener.screener.DEFAULT_TICKERS
 import de.luigialice.stockscreener.screener.parseTickers
@@ -72,10 +73,9 @@ internal fun SettingsPane(
     var tickerText by remember { mutableStateOf(DEFAULT_TICKERS) }
     val activeUniverse by viewModel.universe.collectAsState()
 
-    fun paramsFor(m: ScanMode) = ScanParams(
-        m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble()
-    )
-    fun settingsFor(m: ScanMode) = ScanSettings(minScore, onlyBelow12m, m)
+    fun paramsFor(m: ScanMode) =
+        scanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble())
+    fun settingsFor(m: ScanMode) = ScanSettings(minScore.coerceAtMost(m.maxScore), onlyBelow12m, m)
 
     Column(modifier.padding(16.dp)) {
         Text("Rebound Screener", style = MaterialTheme.typography.titleLarge)
@@ -87,6 +87,7 @@ internal fun SettingsPane(
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return // nichts zu bewerten
             mode = m
+            minScore = minScore.coerceAtMost(m.maxScore) // Score-Slider bleibt im gültigen Bereich
             if (viewModel.downloadRunning()) {
                 // Laufenden Download mit dem neuen Modus neu starten:
                 // bereits geladene Ticker kommen aus dem Cache und kosten keine Zeit
@@ -114,7 +115,7 @@ internal fun SettingsPane(
             RangeSlider(rsiRange, valueRange = 10f..70f, onValueChange = { rsiRange = it })
             SliderRow("Min. relatives Volumen", fmt(minVolume.toDouble(), 1), minVolume, 0.5f, 4f) { minVolume = it }
         } else {
-            DimText("RSI-Bereich: 45 – 65 (fest)")
+            DimText("RSI-Bereich: ${ONGOING_RSI_BAND.start.toInt()} – ${ONGOING_RSI_BAND.endInclusive.toInt()} (fest)")
             DimText("Kriterien: 12M-Verlierer, über SMA20/SMA50, höheres Tief, RSI im Band.")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -133,7 +134,7 @@ internal fun SettingsPane(
                 if (activeUniverse != null && parseTickers(v) != activeUniverse?.tickers) viewModel.setUniverse(null)
             },
             label = { Text("Ticker") },
-            modifier = Modifier.fillMaxWidth().height(120.dp)
+            modifier = Modifier.fillMaxWidth().height(80.dp)
         )
         Spacer(Modifier.height(4.dp))
         var csvError by remember { mutableStateOf<String?>(null) }

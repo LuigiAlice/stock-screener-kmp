@@ -26,7 +26,11 @@ import de.luigialice.stockscreener.ui.isScanning
 @Composable
 internal fun MainPane(state: ScanState, viewModel: ScanViewModel, modifier: Modifier = Modifier) {
     // UI-Zustand hier halten: ResultsPane verlässt bei laufendem Scan die Komposition
-    val ui = remember { ResultsUiState() }
+    MainPane(state, viewModel, remember { ResultsUiState() }, modifier)
+}
+
+@Composable
+internal fun MainPane(state: ScanState, viewModel: ScanViewModel, ui: ResultsUiState, modifier: Modifier) {
     Column(modifier.padding(16.dp)) {
         when (val s = state) {
             is ScanState.Idle -> {

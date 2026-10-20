@@ -53,7 +53,7 @@ object Screener {
         val above20 = price > sma20
         val below50 = price < sma50
         val above50 = price > sma50
-        val rsiRecovery = rsiPrevious < 35 && rsiNow >= 35
+        val rsiRecovery = rsiPrevious < p.rsiMin && rsiNow >= p.rsiMin
         val smaCross = closes[last - 1] <= closes.sma(20, last - 1) && above20
         val higherLow = closes.subList(last - 4, last + 1).min() > closes.subList(last - 9, last - 4).min()
 

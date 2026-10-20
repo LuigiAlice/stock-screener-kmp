@@ -92,9 +92,26 @@ class ScreenerTest {
 
     @Test
     fun rsiBoundaries() {
-        assertEquals(5, Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart)!!.score)
-        assertEquals(4, Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart.copy(rsiMin = 40.001))!!.score)
-        assertEquals(4, Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart.copy(rsiMax = 39.98))!!.score)
+        assertEquals(true, Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart)!!.criteria["RSI im Band"])
+        assertEquals(
+            false,
+            Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart.copy(rsiMin = 40.001))!!.criteria["RSI im Band"]
+        )
+        assertEquals(
+            false,
+            Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart.copy(rsiMax = 39.98))!!.criteria["RSI im Band"]
+        )
+    }
+
+    @Test
+    fun rsiRecoveryUsesConfiguredBandStart() {
+        // Crafted-Daten: RSI steigt von ~31,1 auf ~40,0 (Durchkreuzung des Bandstarts)
+        val crossed35 = Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart.copy(rsiMin = 35.0))!!
+        assertEquals(true, crossed35.criteria["RSI-Erholung"])
+        val crossed3999 = Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart)!!
+        assertEquals(true, crossed3999.criteria["RSI-Erholung"]) // rsiMin = 39.99, nicht feste 35
+        val crossedAbove = Screener.calcRow("AAA", "A", boundaryFrame(), paramsStart.copy(rsiMin = 40.5))!!
+        assertEquals(false, crossedAbove.criteria["RSI-Erholung"]) // Kurs liegt unter dem Bandstart
     }
 
     @Test

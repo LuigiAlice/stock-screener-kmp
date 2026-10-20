@@ -59,7 +59,8 @@ class ResultsTableTest {
     }
 
     @Test
-    fun summaryLinkOpensTheRowUrl() = runSkikoComposeUiTest(size = Size(1600f, 900f)) {
+    fun summaryLinkOpensTheRowUrl() = runSkikoComposeUiTest(size = Size(2000f, 900f)) {
+        // 2000f: die (breiteren) Kriteriums-Spalten brauchen Platz, Links ganz rechts
         val handler = RecordingUriHandler()
         setContent {
             AppTheme {

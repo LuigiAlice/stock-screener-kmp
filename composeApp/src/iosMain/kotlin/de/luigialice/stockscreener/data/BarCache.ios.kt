@@ -10,3 +10,6 @@ actual fun currentTimeMs(): Long =
 
 actual fun createBarStore(): BarStore? =
     FileBarStore((NSHomeDirectory() + "/Documents/bars").toPath())
+
+actual fun createSettingsStore(): BarStore? =
+    FileBarStore((NSHomeDirectory() + "/Documents/settings").toPath())

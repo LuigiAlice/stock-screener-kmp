@@ -11,3 +11,6 @@ actual fun currentTimeMs(): Long = System.currentTimeMillis()
 
 actual fun createBarStore(): BarStore? =
     BarCachePaths.baseDir?.let { FileBarStore(it.toPath()) }
+
+actual fun createSettingsStore(): BarStore? =
+    BarCachePaths.baseDir?.let { FileBarStore(it.toPath() / "settings") }
