@@ -18,7 +18,7 @@ actual fun createYahooClient(): HttpClient = HttpClient(Darwin) {
 @Composable
 actual fun rememberScanViewModel(): ScanViewModel = remember { ScanViewModel() }
 
-actual fun pickCsvText(): String? = null
+actual fun pickCsvText(onPicked: (String?) -> Unit) = onPicked(null)
 
 actual fun exportCsv(content: String) = Unit
 

@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener
 
 import de.luigialice.stockscreener.data.BarCache
+import de.luigialice.stockscreener.data.FileBarStore
 import de.luigialice.stockscreener.data.currentTimeMs
 import de.luigialice.stockscreener.model.Bar
 import de.luigialice.stockscreener.model.Universe
@@ -46,7 +47,7 @@ class ScanViewModelTest {
     }
 
     private fun seedCache(dir: Path): String {
-        BarCache(dir, 60 * 60 * 1000).store("TEST", bars())
+        BarCache(FileBarStore(dir), 60 * 60 * 1000).store("TEST", bars())
         return "TEST"
     }
 
@@ -76,7 +77,7 @@ class ScanViewModelTest {
         val dir = tempDir()
         fs.deleteRecursively(dir)
         val ticker = seedCache(dir)
-        val vm = ScanViewModel(barCache = BarCache(dir, 60 * 60 * 1000))
+        val vm = ScanViewModel(barCache = BarCache(FileBarStore(dir), 60 * 60 * 1000))
         val scope = CoroutineScope(Job() + Dispatchers.Default)
 
         val rowA = Screener.calcRow(ticker, "Test", bars(), params(ScanMode.REBOUND_START))!!
@@ -100,7 +101,7 @@ class ScanViewModelTest {
         val dir = tempDir()
         fs.deleteRecursively(dir)
         val ticker = seedCache(dir)
-        val vm = ScanViewModel(barCache = BarCache(dir, 60 * 60 * 1000))
+        val vm = ScanViewModel(barCache = BarCache(FileBarStore(dir), 60 * 60 * 1000))
         val scope = CoroutineScope(Job() + Dispatchers.Default)
 
         val rowA = Screener.calcRow(ticker, "Test", bars(), params(ScanMode.REBOUND_START))!!
@@ -124,7 +125,7 @@ class ScanViewModelTest {
         val dir = tempDir()
         fs.deleteRecursively(dir)
         val ticker = seedCache(dir)
-        val vm = ScanViewModel(barCache = BarCache(dir, 60 * 60 * 1000))
+        val vm = ScanViewModel(barCache = BarCache(FileBarStore(dir), 60 * 60 * 1000))
         val scope = CoroutineScope(Job() + Dispatchers.Default)
 
         val row = Screener.calcRow(ticker, "Test", bars(), params(ScanMode.REBOUND_START))!!
@@ -161,7 +162,7 @@ class ScanViewModelTest {
         val dir = tempDir()
         fs.deleteRecursively(dir)
         val ticker = seedCache(dir)
-        val vm = ScanViewModel(barCache = BarCache(dir, 60 * 60 * 1000))
+        val vm = ScanViewModel(barCache = BarCache(FileBarStore(dir), 60 * 60 * 1000))
         val scope = CoroutineScope(Job() + Dispatchers.Default)
 
         // Idle bleibt Idle

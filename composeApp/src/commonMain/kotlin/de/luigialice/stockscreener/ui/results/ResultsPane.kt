@@ -41,6 +41,7 @@ import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanRow
 import de.luigialice.stockscreener.pickCsvText
+import de.luigialice.stockscreener.ui.DimText
 import de.luigialice.stockscreener.ui.LinkText
 import de.luigialice.stockscreener.ui.Metric
 import de.luigialice.stockscreener.ui.ScanState
@@ -113,10 +114,9 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
             "Trefferfilter (ohne neuen Scan)", "$displayScore",
             displayScore.toFloat(), 1f, result.settings.mode.maxScore.toFloat()
         ) { ui.scoresByMode = ui.scoresByMode + (mode to it.toInt()) }
-        Text(
+        DimText(
             "Score = Anzahl erfüllter Kriterien (0–${result.settings.mode.maxScore}). " +
-                result.rows.firstOrNull()?.criteria?.keys?.joinToString(" · ").orEmpty(),
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                result.rows.firstOrNull()?.criteria?.keys?.joinToString(" · ").orEmpty()
         )
         if (result.failed.isNotEmpty()) {
             val rateLimited = result.failed.count { it.value == FailedReason.RATE_LIMITED }
@@ -135,7 +135,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
         Spacer(Modifier.height(8.dp))
         Text("Treffer (${hits.size})", fontWeight = FontWeight.SemiBold)
         if (hits.isEmpty()) {
-            Text("Keine Treffer. Trefferfilter senken oder Regeln anpassen.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            DimText("Keine Treffer. Trefferfilter senken oder Regeln anpassen.", fontSize = 14.sp)
         } else {
             ResultsTable(
                 hits,
@@ -152,7 +152,7 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
                     ImportButton(viewModel)
                 }
             } else {
-                Text("CSV-Import/-Export nur am Desktop verfügbar", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                DimText("CSV-Import/-Export nur am Desktop verfügbar")
             }
             HitChartSelector(
                 hits,
@@ -172,17 +172,19 @@ internal fun ImportButton(viewModel: ScanViewModel) {
     var importError by remember { mutableStateOf<String?>(null) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = {
-            pickCsvText()?.let { text ->
-                val rows = runCatching { parseHitsCsv(text) }.getOrElse { emptyList() }
-                if (rows.isNotEmpty()) {
-                    viewModel.loadResults(buildImportedResult(rows))
-                    importError = null
-                } else {
-                    importError = "Treffer-CSV konnte nicht gelesen werden (erwartet: Export der Trefferliste)"
+            pickCsvText { picked ->
+                picked?.let { text ->
+                    val rows = runCatching { parseHitsCsv(text) }.getOrElse { emptyList() }
+                    if (rows.isNotEmpty()) {
+                        viewModel.loadResults(buildImportedResult(rows))
+                        importError = null
+                    } else {
+                        importError = "Treffer-CSV konnte nicht gelesen werden (erwartet: Export der Trefferliste)"
+                    }
                 }
             }
         }) { Text("Treffer-CSV importieren") }
-        importError?.let { Text(it, fontSize = 12.sp, color = AppColors.warn) }
+        importError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
     }
 }
 

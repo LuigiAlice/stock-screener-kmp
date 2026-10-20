@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.pow
@@ -34,7 +35,7 @@ internal fun fmtDouble(v: Double, digits: Int, decimalSep: Char, groupSep: Char?
     val frac = abs % factor
     var intStr = intPart.toString()
     if (groupSep != null) {
-        intStr = intStr.reversed().chunked(3).joinToString(groupSep.toString()) { it.reversed() }
+        intStr = intStr.reversed().chunked(3).joinToString(groupSep.toString()).reversed()
     }
     val fracStr = if (digits > 0) decimalSep + frac.toString().padStart(digits, '0') else ""
     val sign = if (negative && (intPart != 0L || frac != 0L)) "-" else if (negative && intPart == 0L && frac == 0L) "" else ""
@@ -67,11 +68,17 @@ internal fun SliderRow(label: String, valueText: String, value: Float, min: Floa
     Slider(value, valueRange = min..max, onValueChange = onChange)
 }
 
+/** Sekundärer Hinweistext in gedämpftem Ton — das gemeinsame Muster aller Nebeninfos. */
+@Composable
+internal fun DimText(text: String, modifier: Modifier = Modifier, fontSize: TextUnit = 12.sp) {
+    Text(text, fontSize = fontSize, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+}
+
 @Composable
 internal fun Metric(label: String, value: String) {
     Column {
         Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        DimText(label)
     }
 }
 

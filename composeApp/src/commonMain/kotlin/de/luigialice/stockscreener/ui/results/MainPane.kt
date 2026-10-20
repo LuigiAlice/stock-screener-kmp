@@ -18,10 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.luigialice.stockscreener.csvFileDialogsAvailable
+import de.luigialice.stockscreener.ui.DimText
 import de.luigialice.stockscreener.ui.ScanState
 import de.luigialice.stockscreener.ui.ScanViewModel
 import de.luigialice.stockscreener.ui.isScanning
-import de.luigialice.stockscreener.ui.red
 
 @Composable
 internal fun MainPane(state: ScanState, viewModel: ScanViewModel, modifier: Modifier = Modifier) {
@@ -30,14 +30,11 @@ internal fun MainPane(state: ScanState, viewModel: ScanViewModel, modifier: Modi
     Column(modifier.padding(16.dp)) {
         when (val s = state) {
             is ScanState.Idle -> {
-                Text("Aktien-Universum wählen (CSV, automatisch oder S&P 500) und dann „Screener starten“.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                DimText("Aktien-Universum wählen (CSV, automatisch oder S&P 500) und dann „Screener starten“.", fontSize = 14.sp)
                 if (csvFileDialogsAvailable()) {
                     Spacer(Modifier.height(12.dp))
                     ImportButton(viewModel)
-                    Text(
-                        "Alternativ: Trefferliste aus einem früheren Lauf als CSV importieren.",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    DimText("Alternativ: Trefferliste aus einem früheren Lauf als CSV importieren.")
                 }
             }
             is ScanState.Running -> {
@@ -47,7 +44,7 @@ internal fun MainPane(state: ScanState, viewModel: ScanViewModel, modifier: Modi
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            is ScanState.Failed -> Text("Scan fehlgeschlagen: ${s.message}", color = red)
+            is ScanState.Failed -> Text("Scan fehlgeschlagen: ${s.message}", color = MaterialTheme.colorScheme.error)
             is ScanState.Done -> {
                 if (s.isScanning) {
                     Text("Scanne … ${s.scanned}/${s.total}", fontWeight = FontWeight.SemiBold)

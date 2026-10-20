@@ -3,7 +3,7 @@ package de.luigialice.stockscreener.ui
 import de.luigialice.stockscreener.data.BarCache
 import de.luigialice.stockscreener.data.YahooApi
 import de.luigialice.stockscreener.data.YahooHttpException
-import de.luigialice.stockscreener.data.barCacheDirectory
+import de.luigialice.stockscreener.data.createBarStore
 import de.luigialice.stockscreener.data.currentTimeMs
 import de.luigialice.stockscreener.model.Bar
 import de.luigialice.stockscreener.model.FailedReason
@@ -49,7 +49,7 @@ private data class FetchOutcome(val bars: List<Bar>? = null, val reason: FailedR
 
 class ScanViewModel(
     private val api: YahooApi = YahooApi(),
-    private val barCache: BarCache = BarCache(barCacheDirectory())
+    private val barCache: BarCache = BarCache(createBarStore())
 ) : PlatformViewModel() {
 
     private val _state = MutableStateFlow<ScanState>(ScanState.Idle)

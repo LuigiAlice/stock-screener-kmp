@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,7 +24,6 @@ import de.luigialice.stockscreener.rememberScanViewModel
 import de.luigialice.stockscreener.ui.results.MainPane
 import de.luigialice.stockscreener.ui.settings.SettingsPane
 import de.luigialice.stockscreener.ui.theme.AppBackground
-import de.luigialice.stockscreener.ui.theme.AppColors
 import de.luigialice.stockscreener.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
@@ -44,6 +44,7 @@ fun ScreenerApp() {
 
     AppTheme {
         AppBackground(Modifier.fillMaxSize()) {
+            val surface = MaterialTheme.colorScheme.surface
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 if (maxWidth >= 700.dp) {
                     Row(Modifier.fillMaxSize()) {
@@ -52,17 +53,17 @@ fun ScreenerApp() {
                             Modifier
                                 .width(360.dp)
                                 .fillMaxHeight()
-                                .background(AppColors.panel)
+                                .background(surface)
                                 .verticalScroll(rememberScrollState())
                         )
-                        VerticalDivider(color = AppColors.panelEdge)
+                        VerticalDivider()
                         MainPane(state, viewModel, Modifier.weight(1f))
                     }
                 } else {
                     // Schmales Layout (Handy): alles in einem gemeinsamen Scroll, Panes selbst nicht scrollend
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        SettingsPane(state, viewModel, scope, Modifier.fillMaxWidth().background(AppColors.panel))
-                        HorizontalDivider(color = AppColors.panelEdge)
+                        SettingsPane(state, viewModel, scope, Modifier.fillMaxWidth().background(surface))
+                        HorizontalDivider()
                         MainPane(state, viewModel, Modifier.fillMaxWidth())
                     }
                 }

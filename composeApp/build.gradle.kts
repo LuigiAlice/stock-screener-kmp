@@ -32,12 +32,16 @@ kotlin {
         }
     }
 
+    wasmJs {
+        browser()
+        binaries.executable()
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
-            implementation(libs.okio)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.content.negotiation)
             implementation(libs.ktor.serialization.json)
@@ -48,21 +52,48 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
-        androidMain.dependencies {
-            implementation(libs.ktor.client.okhttp)
-            implementation(libs.activity.compose)
-            implementation(libs.lifecycle.viewmodel.compose)
+        // okio-Dateiablage (FileBarStore) für alle Nicht-Wasm-Plattformen,
+        // siehe src/diskMain (okio hat keinen wasmJs-Variant)
+        val androidMain by getting {
+            kotlin.srcDir("src/diskMain/kotlin")
+            dependencies {
+                implementation(libs.okio)
+                implementation(libs.ktor.client.okhttp)
+                implementation(libs.activity.compose)
+                implementation(libs.lifecycle.viewmodel.compose)
+            }
         }
         val desktopMain by getting {
+            kotlin.srcDir("src/diskMain/kotlin")
             dependencies {
                 implementation(compose.desktop.currentOs)
+                implementation(libs.okio)
                 implementation(libs.ktor.client.okhttp)
                 // Windows-Natives zusätzlich einbinden (currentOs = nur macOS)
                 runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.144.6")
             }
         }
-        iosMain.dependencies {
-            implementation(libs.ktor.client.darwin)
+        val desktopTest by getting {
+            dependencies {
+                implementation(libs.compose.ui.test)
+            }
+        }
+        iosMain {
+            kotlin.srcDir("src/diskMain/kotlin")
+            dependencies {
+                implementation(libs.okio)
+                implementation(libs.ktor.client.darwin)
+            }
+        }
+        val wasmJsMain by getting {
+            dependencies {
+                implementation(compose.ui)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+                implementation(compose.components.resources)
+                implementation(libs.ktor.client.js)
+                implementation(libs.kotlinx.browser)
+            }
         }
     }
 }

@@ -27,10 +27,10 @@ import androidx.compose.ui.unit.sp
  */
 internal object AppColors {
     val ink = Color(0xFF0B1720)
+    val inkMid = Color(0xFF0A1822)
     val inkDeep = Color(0xFF07121A)
     val panel = Color(0xFF0F202B)
     val panelEdge = Color(0xFF1C3340)
-    val selection = Color(0xFF16303D)
     val brass = Color(0xFFD9A441)
     val text = Color(0xFFE6EEF2)
     val textDim = Color(0xFF7E97A3)
@@ -47,12 +47,12 @@ internal val appColorScheme = darkColorScheme(
     surfaceVariant = AppColors.panelEdge,
     onSurfaceVariant = AppColors.textDim,
     // Container-Rollen werden von darkColorScheme nicht aus surface abgeleitet
-    surfaceContainerLowest = Color(0xFF0A1822),
+    surfaceContainerLowest = AppColors.inkMid,
     surfaceContainerLow = Color(0xFF0C1A24),
     surfaceContainer = AppColors.panel,
     surfaceContainerHigh = Color(0xFF142C38),
     surfaceContainerHighest = AppColors.panelEdge,
-    secondaryContainer = AppColors.selection,
+    secondaryContainer = Color(0xFF16303D),
     onSecondaryContainer = AppColors.text,
     outline = AppColors.panelEdge,
     outlineVariant = AppColors.panelEdge.copy(alpha = 0.55f),
@@ -91,7 +91,7 @@ internal fun AppBackground(modifier: Modifier = Modifier, content: @Composable (
             val gridColor = AppColors.textDim.copy(alpha = 0.075f)
             val base = Brush.verticalGradient(
                 0f to AppColors.ink,
-                0.5f to Color(0xFF0A1822),
+                0.5f to AppColors.inkMid,
                 1f to AppColors.inkDeep,
             )
             val glow = Brush.radialGradient(

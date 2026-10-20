@@ -1,14 +1,12 @@
 package de.luigialice.stockscreener
 
 import de.luigialice.stockscreener.data.BarCache
-import de.luigialice.stockscreener.data.currentTimeMs
+import de.luigialice.stockscreener.data.InMemoryBarStore
+import de.luigialice.stockscreener.data.barStoreKey
 import de.luigialice.stockscreener.model.Bar
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
-import okio.FileSystem
-import okio.Path
-import okio.Path.Companion.toPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -17,71 +15,75 @@ import kotlin.test.assertTrue
 
 class BarCacheTest {
 
-    private val fs = FileSystem.SYSTEM
-
     private fun bars(vararg closes: Double): List<Bar> =
         closes.mapIndexed { i, c -> Bar(LocalDate(2026, 1, 1).plus(i, DateTimeUnit.DAY), c, 1000.0 * (i + 1)) }
 
-    private fun cacheWithTtl(ttlMs: Long): Pair<BarCache, Path> {
-        val dir = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "barcache-test-${currentTimeMs()}-${kotlin.random.Random.nextInt(100000)}"
-        fs.deleteRecursively(dir)
-        return BarCache(dir, ttlMs) to dir
-    }
-
-    private fun cleanup(dir: Path) = fs.deleteRecursively(dir)
-
     @Test
     fun storesAndReloadsBars() {
-        val (cache, dir) = cacheWithTtl(60 * 60 * 1000)
+        val store = InMemoryBarStore()
         val data = bars(100.0, 101.5, 99.0)
-        cache.store("AAPL", data)
+        BarCache(store).store("AAPL", data)
 
-        val reloaded = BarCache(dir, 60 * 60 * 1000).freshBars("AAPL")
+        val reloaded = BarCache(store).freshBars("AAPL")
         assertNotNull(reloaded)
         assertEquals(3, reloaded.size)
         assertEquals(101.5, reloaded[1].close, 1e-9)
         assertEquals(2000.0, reloaded[1].volume, 1e-9)
         assertEquals(LocalDate(2026, 1, 2), reloaded[1].date)
-        cleanup(dir)
     }
 
     @Test
-    fun freshWithinTtlStaleAfterTtl() = kotlinx.coroutines.runBlocking {
-        val (shortTtl, dir) = cacheWithTtl(50)
+    fun freshWithinTtlStaleAfterTtl() {
         val data = bars(100.0)
-        shortTtl.store("MSFT", data)
-        assertNotNull(shortTtl.freshBars("MSFT"))
-        kotlinx.coroutines.delay(80)
-        assertNull(shortTtl.freshBars("MSFT")) // abgelaufen
-        assertNotNull(shortTtl.anyBars("MSFT")) // Rohdaten trotzdem da
-        cleanup(dir)
+
+        val fresh = BarCache(InMemoryBarStore(), 60 * 60 * 1000)
+        fresh.store("MSFT", data)
+        assertNotNull(fresh.freshBars("MSFT"))
+
+        // Negative TTL: jeder Eintrag ist sofort abgelaufen
+        val store = InMemoryBarStore()
+        val stale = BarCache(store, -1)
+        stale.store("MSFT", data)
+        assertNull(stale.freshBars("MSFT")) // abgelaufen
+        assertNotNull(stale.anyBars("MSFT")) // Rohdaten trotzdem da
     }
 
     @Test
-    fun sanitizesTickerForFilename() {
-        val (cache, dir) = cacheWithTtl(60 * 60 * 1000)
+    fun sanitizesStoreKeys() {
+        assertEquals("_GSPC", barStoreKey("^GSPC"))
+        assertEquals("BRK-B", barStoreKey("BRK-B"))
+        assertEquals("ABC_DEF", barStoreKey("ABC.DEF"))
+
+        val store = InMemoryBarStore()
+        val cache = BarCache(store)
         cache.store("^GSPC", bars(5000.0))
         cache.store("BRK-B", bars(450.0))
-        val names = fs.list(dir).map { it.name }
-        assertTrue(names.all { it.matches(Regex("[A-Za-z0-9_-]+\\.json\\.gz")) })
-        assertEquals(5000.0, BarCache(dir, 60 * 60 * 1000).freshBars("^GSPC")!![0].close, 1e-9)
-        cleanup(dir)
+        assertTrue(store.keys.isNotEmpty())
+        assertTrue(store.keys.all { it.matches(Regex("[A-Za-z0-9_-]+")) })
+        assertEquals(5000.0, BarCache(store).freshBars("^GSPC")!![0].close, 1e-9)
     }
 
     @Test
     fun missingTickerReturnsNull() {
-        val (cache, dir) = cacheWithTtl(60 * 60 * 1000)
+        val cache = BarCache(InMemoryBarStore())
         assertNull(cache.freshBars("UNKNOWN"))
         assertNull(cache.anyBars("UNKNOWN"))
-        cleanup(dir)
     }
 
     @Test
     fun emptyBarsNotStored() {
-        val (cache, dir) = cacheWithTtl(60 * 60 * 1000)
+        val store = InMemoryBarStore()
+        val cache = BarCache(store)
         cache.store("EMPTY", emptyList())
         assertNull(cache.freshBars("EMPTY"))
-        assertTrue(!fs.exists(dir) || fs.list(dir).isEmpty())
-        cleanup(dir)
+        assertTrue(store.keys.isEmpty())
+    }
+
+    @Test
+    fun nullStoreDisablesPersistence() {
+        val cache = BarCache(null)
+        cache.store("AAPL", bars(100.0))
+        assertNotNull(cache.freshBars("AAPL")) // In-Memory greift auch ohne Store
+        assertNull(BarCache(null).freshBars("AAPL")) // aber keine Persistenz
     }
 }

@@ -1,6 +1,5 @@
 package de.luigialice.stockscreener.data
 
-import okio.Path
 import okio.Path.Companion.toPath
 
 object BarCachePaths {
@@ -10,4 +9,5 @@ object BarCachePaths {
 
 actual fun currentTimeMs(): Long = System.currentTimeMillis()
 
-actual fun barCacheDirectory(): Path? = BarCachePaths.baseDir?.toPath()
+actual fun createBarStore(): BarStore? =
+    BarCachePaths.baseDir?.let { FileBarStore(it.toPath()) }

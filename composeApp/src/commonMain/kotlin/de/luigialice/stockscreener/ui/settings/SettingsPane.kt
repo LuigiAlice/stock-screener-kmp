@@ -42,13 +42,12 @@ import de.luigialice.stockscreener.model.Universe
 import de.luigialice.stockscreener.pickCsvText
 import de.luigialice.stockscreener.screener.DEFAULT_TICKERS
 import de.luigialice.stockscreener.screener.parseTickers
+import de.luigialice.stockscreener.ui.DimText
 import de.luigialice.stockscreener.ui.ScanState
 import de.luigialice.stockscreener.ui.ScanViewModel
 import de.luigialice.stockscreener.ui.SliderRow
 import de.luigialice.stockscreener.ui.fmt
-import de.luigialice.stockscreener.ui.green
 import de.luigialice.stockscreener.ui.isScanning
-import de.luigialice.stockscreener.ui.red
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -80,7 +79,7 @@ internal fun SettingsPane(
 
     Column(modifier.padding(16.dp)) {
         Text("Rebound Screener", style = MaterialTheme.typography.titleLarge)
-        Text("Kein Kaufsignal, keine Anlageberatung.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        DimText("Kein Kaufsignal, keine Anlageberatung.")
         Spacer(Modifier.height(16.dp))
 
         Text("Scan-Modus", fontWeight = FontWeight.SemiBold)
@@ -115,8 +114,8 @@ internal fun SettingsPane(
             RangeSlider(rsiRange, valueRange = 10f..70f, onValueChange = { rsiRange = it })
             SliderRow("Min. relatives Volumen", fmt(minVolume.toDouble(), 1), minVolume, 0.5f, 4f) { minVolume = it }
         } else {
-            Text("RSI-Bereich: 45 – 65 (fest)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Kriterien: 12M-Verlierer, über SMA20/SMA50, höheres Tief, RSI im Band.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            DimText("RSI-Bereich: 45 – 65 (fest)")
+            DimText("Kriterien: 12M-Verlierer, über SMA20/SMA50, höheres Tief, RSI im Band.")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = onlyBelow12m, onCheckedChange = { onlyBelow12m = it })
@@ -159,14 +158,16 @@ internal fun SettingsPane(
         }
 
         fun loadFromCsvFile() {
-            pickCsvText()?.let { text ->
-                runCatching { CsvUniverse.parse(text) }
-                    .onSuccess {
-                        viewModel.setUniverse(it)
-                        tickerText = it.tickers.joinToString(" ")
-                        csvError = null
-                    }
-                    .onFailure { csvError = "CSV konnte nicht gelesen werden: ${it.message}" }
+            pickCsvText { picked ->
+                picked?.let { text ->
+                    runCatching { CsvUniverse.parse(text) }
+                        .onSuccess {
+                            viewModel.setUniverse(it)
+                            tickerText = it.tickers.joinToString(" ")
+                            csvError = null
+                        }
+                        .onFailure { csvError = "CSV konnte nicht gelesen werden: ${it.message}" }
+                }
             }
         }
 
@@ -210,8 +211,8 @@ internal fun SettingsPane(
                 )
             }
         }
-        csvError?.let { Text(it, fontSize = 12.sp, color = red) }
-        activeUniverse?.let { Text("Universum aktiv: ${it.tickers.size} Aktien", fontSize = 12.sp, color = green) }
+        csvError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+        activeUniverse?.let { DimText("Universum aktiv: ${it.tickers.size} Aktien") }
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
         Text("Scan-Ablauf", fontWeight = FontWeight.SemiBold)

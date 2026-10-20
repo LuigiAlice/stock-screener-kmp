@@ -32,14 +32,14 @@ internal fun runOnEdt(block: () -> Int): Int =
         result
     }
 
-actual fun pickCsvText(): String? {
+actual fun pickCsvText(onPicked: (String?) -> Unit) {
     val chooser = JFileChooser().apply {
         fileFilter = FileNameExtensionFilter("CSV-Dateien", "csv")
         dialogTitle = "Universe-CSV wählen"
     }
-    if (runOnEdt { chooser.showOpenDialog(null) } != JFileChooser.APPROVE_OPTION) return null
-    val file = chooser.selectedFile ?: return null
-    return runCatching { file.readText() }.getOrNull()
+    if (runOnEdt { chooser.showOpenDialog(null) } != JFileChooser.APPROVE_OPTION) return onPicked(null)
+    val file = chooser.selectedFile ?: return onPicked(null)
+    onPicked(runCatching { file.readText() }.getOrNull())
 }
 
 actual fun csvFileDialogsAvailable(): Boolean = true

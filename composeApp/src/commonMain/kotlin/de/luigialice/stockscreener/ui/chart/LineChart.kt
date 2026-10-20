@@ -34,7 +34,6 @@ import de.luigialice.stockscreener.ui.fmt
 import de.luigialice.stockscreener.ui.fmtDate
 import de.luigialice.stockscreener.ui.fmtDouble
 import de.luigialice.stockscreener.ui.green
-import de.luigialice.stockscreener.ui.theme.AppColors
 
 @Composable
 fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = null) {
@@ -44,8 +43,8 @@ fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = n
     val titleStyle = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
     val lastPriceStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = green)
     val tooltipStyle = TextStyle(fontSize = 11.sp, color = colors.onSurface)
-    val axisColor = colors.onSurfaceVariant
-    val hoverColor = colors.onSurface
+    val axisTint = colors.onSurfaceVariant
+    val crosshairTint = colors.onSurface
     var hoverX by remember(bars) { mutableStateOf<Float?>(null) }
     Spacer(
         modifier
@@ -122,15 +121,15 @@ fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = n
 
                     // Y-Achse: Gitterlinien + Preis-Beschriftung
                     g.yLabels.forEach { (m, yy) ->
-                        drawLine(axisColor.copy(alpha = 0.25f), Offset(g.padLeft, yy), Offset(size.width, yy), strokeWidth = 1f)
+                        drawLine(axisTint.copy(alpha = 0.25f), Offset(g.padLeft, yy), Offset(size.width, yy), strokeWidth = 1f)
                         drawText(m, topLeft = Offset(0f, (yy - m.size.height / 2f).coerceIn(g.plotTop, g.plotBottom - m.size.height)))
                     }
-                    drawLine(axisColor.copy(alpha = 0.6f), Offset(g.padLeft, g.plotTop), Offset(g.padLeft, g.plotBottom), strokeWidth = 1f)
+                    drawLine(axisTint.copy(alpha = 0.6f), Offset(g.padLeft, g.plotTop), Offset(g.padLeft, g.plotBottom), strokeWidth = 1f)
 
                     // Monatsraster + Jahres-/Monats-Beschriftung
                     g.monthGrid.forEach { xx ->
                         if (xx > g.padLeft + 1f) {
-                            drawLine(axisColor.copy(alpha = 0.15f), Offset(xx, g.plotTop), Offset(xx, g.plotBottom), strokeWidth = 1f)
+                            drawLine(axisTint.copy(alpha = 0.15f), Offset(xx, g.plotTop), Offset(xx, g.plotBottom), strokeWidth = 1f)
                         }
                     }
                     g.yearLabels.forEach { (m, xx) ->
@@ -139,7 +138,7 @@ fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = n
                     g.monthLabels.forEach { (m, xx) ->
                         drawText(m, topLeft = Offset((xx - m.size.width / 2f).coerceIn(0f, size.width - m.size.width), g.plotBottom + 6.dp.toPx()))
                     }
-                    drawLine(axisColor.copy(alpha = 0.6f), Offset(g.padLeft, g.plotBottom), Offset(size.width, g.plotBottom), strokeWidth = 1f)
+                    drawLine(axisTint.copy(alpha = 0.6f), Offset(g.padLeft, g.plotBottom), Offset(size.width, g.plotBottom), strokeWidth = 1f)
 
                     // Kurslinie
                     drawPath(g.path, green, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
@@ -166,20 +165,20 @@ fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = n
                         val py = chartY(bar.close, g.scale, g.plotTop, g.plotH)
 
                         drawLine(
-                            hoverColor.copy(alpha = 0.5f),
+                            crosshairTint.copy(alpha = 0.5f),
                             Offset(px, g.plotTop),
                             Offset(px, g.plotBottom),
                             strokeWidth = 1f,
                             pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
                         )
                         drawLine(
-                            hoverColor.copy(alpha = 0.3f),
+                            crosshairTint.copy(alpha = 0.3f),
                             Offset(g.padLeft, py),
                             Offset(size.width, py),
                             strokeWidth = 1f,
                             pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
                         )
-                        drawCircle(hoverColor, radius = 4.dp.toPx(), center = Offset(px, py))
+                        drawCircle(crosshairTint, radius = 4.dp.toPx(), center = Offset(px, py))
                         drawCircle(green, radius = 2.5.dp.toPx(), center = Offset(px, py))
 
                         val lines = "${fmtDate(bar.date)}\nKurs: ${fmt(bar.close)}\nVolumen: ${volumeLabel(bar.volume)}"
@@ -189,13 +188,13 @@ fun LineChart(bars: List<Bar>, modifier: Modifier = Modifier, title: String? = n
                         val boxX = if (px + 12.dp.toPx() + boxW > size.width) px - 12.dp.toPx() - boxW else px + 12.dp.toPx()
                         val boxY = (py - boxH / 2f).coerceIn(g.plotTop, g.plotBottom - boxH)
                         drawRoundRect(
-                            AppColors.panel.copy(alpha = 0.97f),
+                            colors.surface.copy(alpha = 0.97f),
                             topLeft = Offset(boxX, boxY),
                             size = Size(boxW, boxH),
                             cornerRadius = CornerRadius(6.dp.toPx())
                         )
                         drawRoundRect(
-                            axisColor.copy(alpha = 0.6f),
+                            axisTint.copy(alpha = 0.6f),
                             topLeft = Offset(boxX, boxY),
                             size = Size(boxW, boxH),
                             cornerRadius = CornerRadius(6.dp.toPx()),
