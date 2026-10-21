@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
@@ -48,5 +50,34 @@ class SettingsPaneTest {
         onNodeWithText("Rückgang (Handelstage)", substring = true).assertExists()
         onNodeWithText("Max. Performance im Zeitraum", substring = true).assertExists()
         onNodeWithText("Min. relatives Volumen", substring = true).assertExists()
+    }
+
+    @Test
+    fun scanAblaufIsHiddenByDefault() = runSkikoComposeUiTest(size = Size(900f, 1400f)) {
+        val vm = ScanViewModel(barCache = tempCache())
+        setContent {
+            AppTheme {
+                val scope = rememberCoroutineScope()
+                SettingsPane(ScanState.Idle, vm, scope, paneModifier())
+            }
+        }
+        onNodeWithText("Batch-Größe", substring = true).assertDoesNotExist()
+        onNodeWithText("Pause zwischen Batches", substring = true).assertDoesNotExist()
+        onNodeWithContentDescription("Einstellungen").assertExists()
+    }
+
+    @Test
+    fun settingsDialogShowsScanAblauf() = runSkikoComposeUiTest(size = Size(900f, 1400f)) {
+        val vm = ScanViewModel(barCache = tempCache())
+        setContent {
+            AppTheme {
+                val scope = rememberCoroutineScope()
+                SettingsPane(ScanState.Idle, vm, scope, paneModifier())
+            }
+        }
+        onNodeWithContentDescription("Einstellungen").performClick()
+        onNodeWithText("Scan-Ablauf", substring = true).assertExists()
+        onNodeWithText("Batch-Größe", substring = true).assertExists()
+        onNodeWithText("Pause zwischen Batches", substring = true).assertExists()
     }
 }

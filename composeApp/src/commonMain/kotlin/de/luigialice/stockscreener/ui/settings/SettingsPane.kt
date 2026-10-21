@@ -8,13 +8,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Text
@@ -70,6 +76,7 @@ internal fun SettingsPane(
     var onlyBelow12m by remember { mutableStateOf(true) }
     var batchSize by remember { mutableStateOf(25) }
     var pause by remember { mutableStateOf(1) }
+    var settingsOpen by remember { mutableStateOf(false) }
     var tickerText by remember { mutableStateOf(DEFAULT_TICKERS) }
     val activeUniverse by viewModel.universe.collectAsState()
 
@@ -78,7 +85,26 @@ internal fun SettingsPane(
     fun settingsFor(m: ScanMode) = ScanSettings(DEFAULT_SCORE_MIN.coerceAtMost(m.maxScore), onlyBelow12m, m)
 
     Column(modifier.padding(16.dp)) {
-        Text("Rebound Screener", style = MaterialTheme.typography.titleLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Rebound Screener", style = MaterialTheme.typography.titleLarge)
+            IconButton(onClick = { settingsOpen = true }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Settings, contentDescription = "Einstellungen", modifier = Modifier.size(18.dp))
+            }
+        }
+        if (settingsOpen) {
+            AlertDialog(
+                onDismissRequest = { settingsOpen = false },
+                title = { Text("Einstellungen") },
+                text = {
+                    Column {
+                        Text("Scan-Ablauf", fontWeight = FontWeight.SemiBold)
+                        SliderRow("Batch-Größe (parallel)", "$batchSize", batchSize.toFloat(), 5f, 50f) { batchSize = it.toInt() }
+                        SliderRow("Pause zwischen Batches (Sek.)", "$pause", pause.toFloat(), 0f, 15f) { pause = it.toInt() }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { settingsOpen = false }) { Text("Fertig") } }
+            )
+        }
         DimText("Kein Kaufsignal, keine Anlageberatung.")
         Spacer(Modifier.height(16.dp))
 
@@ -213,10 +239,6 @@ internal fun SettingsPane(
         csvError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
         activeUniverse?.let { DimText("Universum aktiv: ${it.tickers.size} Aktien") }
         HorizontalDivider()
-        Spacer(Modifier.height(8.dp))
-        Text("Scan-Ablauf", fontWeight = FontWeight.SemiBold)
-        SliderRow("Batch-Größe (parallel)", "$batchSize", batchSize.toFloat(), 5f, 50f) { batchSize = it.toInt() }
-        SliderRow("Pause zwischen Batches (Sek.)", "$pause", pause.toFloat(), 0f, 15f) { pause = it.toInt() }
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = {
