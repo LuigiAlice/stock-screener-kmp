@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import de.luigialice.stockscreener.csvFileDialogsAvailable
 import de.luigialice.stockscreener.data.CsvUniverse
 import de.luigialice.stockscreener.data.UniverseDiscovery
+import de.luigialice.stockscreener.model.DEFAULT_SCORE_MIN
 import de.luigialice.stockscreener.model.ONGOING_RSI_BAND
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanSettings
@@ -67,7 +68,6 @@ internal fun SettingsPane(
     var rsiRange by remember { mutableStateOf(35f..48f) }
     var minVolume by remember { mutableStateOf(1.3f) }
     var onlyBelow12m by remember { mutableStateOf(true) }
-    var minScore by remember { mutableStateOf(5) }
     var batchSize by remember { mutableStateOf(25) }
     var pause by remember { mutableStateOf(1) }
     var tickerText by remember { mutableStateOf(DEFAULT_TICKERS) }
@@ -75,7 +75,7 @@ internal fun SettingsPane(
 
     fun paramsFor(m: ScanMode) =
         scanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble())
-    fun settingsFor(m: ScanMode) = ScanSettings(minScore.coerceAtMost(m.maxScore), onlyBelow12m, m)
+    fun settingsFor(m: ScanMode) = ScanSettings(DEFAULT_SCORE_MIN.coerceAtMost(m.maxScore), onlyBelow12m, m)
 
     Column(modifier.padding(16.dp)) {
         Text("Rebound Screener", style = MaterialTheme.typography.titleLarge)
@@ -87,7 +87,6 @@ internal fun SettingsPane(
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return // nichts zu bewerten
             mode = m
-            minScore = minScore.coerceAtMost(m.maxScore) // Score-Slider bleibt im gültigen Bereich
             if (viewModel.downloadRunning()) {
                 // Laufenden Download mit dem neuen Modus neu starten:
                 // bereits geladene Ticker kommen aus dem Cache und kosten keine Zeit
@@ -122,7 +121,6 @@ internal fun SettingsPane(
             Checkbox(checked = onlyBelow12m, onCheckedChange = { onlyBelow12m = it })
             Text("Nur Aktien unter Kurs von vor 12 Monaten", fontSize = 13.sp)
         }
-        SliderRow("Mindest-Score als Treffer (von ${mode.maxScore})", "$minScore", minScore.toFloat(), 1f, mode.maxScore.toFloat()) { minScore = it.toInt() }
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
         Text("Universum", fontWeight = FontWeight.SemiBold)
@@ -234,7 +232,7 @@ internal fun SettingsPane(
         // Regeländerungen sofort validieren: mit geladenen Kursen instant,
         // ohne Kurse (z. B. nach Import) einmaliger Download-Scan des aktiven Universums
         val hasBars = viewModel.rememberHasBars()
-        LaunchedEffect(mode, days, maxPerf, rsiRange, minVolume, onlyBelow12m, minScore, hasBars, activeUniverse, state.isScanning, tickerText) {
+        LaunchedEffect(mode, days, maxPerf, rsiRange, minVolume, onlyBelow12m, hasBars, activeUniverse, state.isScanning, tickerText) {
             if (viewModel.downloadRunning()) return@LaunchedEffect // echter Download läuft
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return@LaunchedEffect

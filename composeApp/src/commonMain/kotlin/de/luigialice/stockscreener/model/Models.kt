@@ -59,6 +59,12 @@ data class ScanRow(
     val google: String
 )
 
+/**
+ * Startwert des Trefferfilters: entscheidet allein die Anzeige ([ScanResult.settings]),
+ * der Scan selbst filtert nicht nach Score. Per Regler in den Ergebnissen verschiebbar.
+ */
+const val DEFAULT_SCORE_MIN: Int = 5
+
 data class ScanSettings(
     val scoreMin: Int,
     val onlyBelow12m: Boolean,
