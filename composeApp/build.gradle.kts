@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.Sync
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -157,4 +158,22 @@ tasks.register("minifiedJar", proguard.gradle.ProGuardTask::class) {
     )
     jmods.forEach { libraryjars("${System.getProperty("java.home")}/jmods/$it.jmod") }
     configuration(project.file("compose-desktop.pro"))
+}
+
+// Dev- und Prod-Build füllen denselben Webpack-Ordner build/wasm/packages/<name>/kotlin.
+// Der inkrementelle Sync des Kotlin-Plugins (DefaultIncrementalSyncTask) übersieht dabei
+// geänderte Dateien: nach einem Prod-Deploy liegen dann das alte Import-Objekt (ohne
+// kotlin.time.toFixed) neben einem Dev-Wasm (braucht es) – der Browser startet mit
+// LinkError "function import requires a callable". Import-Objekt deshalb vor jedem Sync
+// entfernen, damit es garantiert neu kopiert wird. (Umgekehrt ist es harmlos: zusätzliche
+// Einträge im Import-Objekt stören nicht.)
+tasks.withType<Sync>().configureEach {
+    if (name.endsWith("ExecutableCompileSync")) {
+        doFirst {
+            destinationDirectory.get().asFile
+                .listFiles()
+                ?.filter { it.name.endsWith(".import-object.mjs") }
+                ?.forEach { it.delete() }
+        }
+    }
 }
