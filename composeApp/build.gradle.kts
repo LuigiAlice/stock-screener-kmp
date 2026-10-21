@@ -1,6 +1,6 @@
-import org.gradle.api.tasks.Sync
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.IncrementalSyncTask
 
 buildscript {
     repositories { mavenCentral() }
@@ -161,19 +161,18 @@ tasks.register("minifiedJar", proguard.gradle.ProGuardTask::class) {
 }
 
 // Dev- und Prod-Build füllen denselben Webpack-Ordner build/wasm/packages/<name>/kotlin.
-// Der inkrementelle Sync des Kotlin-Plugins (DefaultIncrementalSyncTask) übersieht dabei
-// geänderte Dateien: nach einem Prod-Deploy liegen dann das alte Import-Objekt (ohne
-// kotlin.time.toFixed) neben einem Dev-Wasm (braucht es) – der Browser startet mit
-// LinkError "function import requires a callable". Import-Objekt deshalb vor jedem Sync
-// entfernen, damit es garantiert neu kopiert wird. (Umgekehrt ist es harmlos: zusätzliche
-// Einträge im Import-Objekt stören nicht.)
-tasks.withType<Sync>().configureEach {
-    if (name.endsWith("ExecutableCompileSync")) {
-        doFirst {
-            destinationDirectory.get().asFile
-                .listFiles()
-                ?.filter { it.name.endsWith(".import-object.mjs") }
-                ?.forEach { it.delete() }
-        }
+// Der Sync des Kotlin-Plugins (DefaultIncrementalSyncTask, kein org.gradle.api.tasks.Sync!)
+// kopiert nur Dateien, die sich seit dem letzten Lauf *dieses Tasks* geändert haben. Läuft
+// also der Prod-Sync und danach der Dev-Sync, bleibt das Prod-Import-Objekt (ohne
+// kotlin.time.toFixed) neben dem Dev-Wasm (braucht es) liegen – der Browser startet mit
+// LinkError "function import requires a callable". Deshalb vor jedem Sync die eigenen
+// Dateien im Ziel löschen, damit der Lauf alles neu kopiert (fehlende Zieldateien führen
+// zu einem vollständigen Kopieren, nicht zu einem inkrementellen).
+tasks.withType<IncrementalSyncTask>().configureEach {
+    doFirst {
+        val dest = destinationDirectory.get()
+        from.files
+            .filter { it.isDirectory }
+            .forEach { src -> src.listFiles()?.forEach { f -> project.delete(dest.resolve(f.name)) } }
     }
 }
