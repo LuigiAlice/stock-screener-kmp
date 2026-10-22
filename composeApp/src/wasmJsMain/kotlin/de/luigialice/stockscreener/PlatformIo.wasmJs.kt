@@ -24,9 +24,8 @@ import org.w3c.files.BlobPropertyBag
 import org.w3c.files.FileReader
 
 /**
- * Externe Hosts laufen im Browser über lokale Apache-/Dev-Server-Proxypfade
- * (CORS: die Zielhost antworten ohne Access-Control-Allow-Origin).
- * Reihenfolge egal, da Prefix-Matching auf den ganzen Host beginnt.
+ * Externe Hosts laufen im Browser über einen konfigurierten HTTPS-Proxy (Pages)
+ * oder lokale Apache-/Dev-Server-Proxypfade (CORS).
  */
 private val proxyHosts = mapOf(
     "query1.finance.yahoo.com" to "proxy/yahoo",
@@ -35,15 +34,36 @@ private val proxyHosts = mapOf(
     "en.wikipedia.org" to "proxy/wikipedia",
 )
 
+private fun configuredProxyEndpoint(): URL? {
+    val raw = document.querySelector("meta[name='stock-data-proxy-url']")
+        ?.getAttribute("content")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: return null
+    return runCatching { URL(raw) }
+        .getOrNull()
+        ?.takeIf { it.protocol == "https:" && it.hostname.isNotBlank() }
+}
+
 private val LocalProxy = createClientPlugin("LocalProxy") {
     onRequest { request, _ ->
         val mapped = proxyHosts[request.url.host] ?: return@onRequest
+        val endpoint = configuredProxyEndpoint()
         val loc = window.location
-        request.url.protocol = if (loc.protocol == "https:") URLProtocol.HTTPS else URLProtocol.HTTP
-        request.url.host = loc.hostname
-        request.url.port = loc.port.toIntOrNull() ?: if (loc.protocol == "https:") 443 else 80
-        // Basispfad der ausgelieferten Seite ("" lokal, "stock-screener" unter /stock-screener/)
-        val basePath = loc.pathname.substringBeforeLast('/', "").split('/').filter { it.isNotEmpty() }
+        val protocol = endpoint?.protocol ?: loc.protocol
+        val host = endpoint?.hostname ?: loc.hostname
+        val port = endpoint?.port?.toIntOrNull()
+            ?: loc.port.toIntOrNull()
+            ?: if (protocol == "https:") 443 else 80
+        request.url.protocol = if (protocol == "https:") URLProtocol.HTTPS else URLProtocol.HTTP
+        request.url.host = host
+        request.url.port = port
+        // Pages nutzt einen separaten Proxy-Endpunkt; lokale Server haben einen Basispfad.
+        val basePath = if (endpoint != null) {
+            endpoint.pathname.split('/').filter { it.isNotEmpty() }
+        } else {
+            loc.pathname.substringBeforeLast('/', "").split('/').filter { it.isNotEmpty() }
+        }
         request.url.pathSegments =
             basePath + mapped.split('/') + request.url.pathSegments.filter { it.isNotEmpty() }
     }

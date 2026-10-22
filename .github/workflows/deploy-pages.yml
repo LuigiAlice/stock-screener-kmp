@@ -29,6 +29,29 @@ jobs:
       - name: Build WebAssembly app
         run: ./gradlew :composeApp:wasmJsBrowserDistribution
 
+      - name: Configure data proxy endpoint
+        env:
+          STOCK_DATA_PROXY_URL: ${{ vars.STOCK_DATA_PROXY_URL }}
+        run: |
+          python3 - <<'PY'
+          import html
+          import os
+          from pathlib import Path
+
+          index = Path("composeApp/build/dist/wasmJs/productionExecutable/index.html")
+          page = index.read_text()
+          marker = '<meta name="stock-data-proxy-url" content="">'
+          proxy_url = os.environ.get("STOCK_DATA_PROXY_URL", "").strip()
+          if proxy_url and not proxy_url.startswith("https://"):
+              raise SystemExit("STOCK_DATA_PROXY_URL must use HTTPS")
+          replacement = f'<meta name="stock-data-proxy-url" content="{html.escape(proxy_url, quote=True)}">'
+          if marker not in page:
+              raise SystemExit("Could not find the stock-data-proxy-url meta tag in the web build")
+          index.write_text(page.replace(marker, replacement, 1))
+          if not proxy_url:
+              print("STOCK_DATA_PROXY_URL is not configured; the deployed app has no data proxy.")
+          PY
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v4
         with:
