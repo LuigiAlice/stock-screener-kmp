@@ -13,34 +13,33 @@ private fun mean(values: List<Double>): Double = values.sum() / values.size
 
 private fun List<Double>.sma(window: Int): Double = mean(takeLast(window))
 
-    private fun List<Double>.rsi14(atIndex: Int): Double? {
-        val first = maxOf(1, atIndex - 13)
-        var gain = 0.0
-        var loss = 0.0
-        var count = 0
-        for (i in first..atIndex) {
-            val change = this[i] - this[i - 1]
-            if (change > 0) gain += change else loss += -change
-            count++
-        }
-        val avgGain = gain / count
-        val avgLoss = loss / count
-        if (avgLoss == 0.0) return null
-        return 100.0 - 100.0 / (1.0 + avgGain / avgLoss)
+private fun List<Double>.rsi14(atIndex: Int): Double {
+    val first = maxOf(1, atIndex - 13)
+    var gain = 0.0
+    var loss = 0.0
+    var count = 0
+    for (i in first..atIndex) {
+        val change = this[i] - this[i - 1]
+        if (change > 0) gain += change else loss += -change
+        count++
     }
+    val avgGain = gain / count
+    val avgLoss = loss / count
+    if (avgLoss == 0.0) return if (avgGain == 0.0) 50.0 else 100.0
+    return 100.0 - 100.0 / (1.0 + avgGain / avgLoss)
+}
 
 object Screener {
 
-    fun calcRow(ticker: String, name: String, bars: List<Bar>, p: ScanParams, exchange: String = ""): ScanRow? {
+    fun calcRow(ticker: String, name: String, bars: List<Bar>, params: ScanParams, exchange: String = ""): ScanRow? {
         if (bars.size < 80) return null
         val closes = bars.map { it.close }
         val volumes = bars.map { it.volume }
         val last = bars.size - 1
-        val days = p.days
+        val days = params.days
 
         val rsiNow = closes.rsi14(last)
         val rsiPrevious = closes.rsi14(last - 1)
-        if (rsiNow == null || rsiPrevious == null) return null
         val vol20 = volumes.sma(20)
         if (vol20 <= 0.0) return null
         if (bars.size <= days) return null
@@ -53,13 +52,13 @@ object Screener {
         val above20 = price > sma20
         val below50 = price < sma50
         val above50 = price > sma50
-        val rsiRecovery = rsiPrevious < p.rsiMin && rsiNow >= p.rsiMin
+        val rsiRecovery = rsiPrevious < params.rsiMin && rsiNow >= params.rsiMin
         val smaCross = closes[last - 1] <= closes.sma(20, last - 1) && above20
         val higherLow = closes.subList(last - 4, last + 1).min() > closes.subList(last - 9, last - 4).min()
 
         val criteria: LinkedHashMap<String, Boolean>
         val performance: Double?
-        val ongoing = p.mode == ScanMode.ONGOING_RECOVERY
+        val ongoing = params.mode == ScanMode.ONGOING_RECOVERY
         if (ongoing) {
             performance = null
             criteria = linkedMapOf(
@@ -67,16 +66,16 @@ object Screener {
                 "Über SMA20" to above20,
                 "Über SMA50" to above50,
                 "Höheres Tief" to higherLow,
-                "RSI im Band" to (p.rsiMin <= rsiNow && rsiNow <= p.rsiMax)
+                "RSI im Band" to (params.rsiMin <= rsiNow && rsiNow <= params.rsiMax)
             )
         } else {
             performance = (price / closes[last - days] - 1) * 100
             criteria = linkedMapOf(
-                "Perf-Kriterium" to (performance <= p.maxPerf),
-                "RSI im Band" to (p.rsiMin <= rsiNow && rsiNow <= p.rsiMax),
+                "Perf-Kriterium" to (performance <= params.maxPerf),
+                "RSI im Band" to (params.rsiMin <= rsiNow && rsiNow <= params.rsiMax),
                 "Über SMA20" to above20,
                 "Unter SMA50" to below50,
-                "Volumen ok" to (relVolume >= p.minVolume),
+                "Volumen ok" to (relVolume >= params.minVolume),
                 "RSI-Erholung" to rsiRecovery,
                 "SMA20-Cross" to smaCross,
                 "Höheres Tief" to higherLow
@@ -113,9 +112,9 @@ object Screener {
     ): ScanResult {
         val rows = mutableListOf<ScanRow>()
         val failed = mutableMapOf<String, FailedReason>()
-        universe.tickers.forEach { ticker ->
+        universe.stocks.forEach { (ticker, stock) ->
             val bars = loader(ticker)
-            val row = bars?.let { calcRow(ticker, universe.names[ticker] ?: "—", it, params, universe.exchanges[ticker] ?: "") }
+            val row = bars?.let { calcRow(ticker, stock.name, it, params, stock.exchange) }
             if (row == null) failed[ticker] = FailedReason.NO_DATA else rows.add(row)
         }
         return ScanResult(

@@ -148,7 +148,7 @@ class ScanViewModelTest {
         val vm = ScanViewModel(barCache = BarCache(null))
         val scope = CoroutineScope(Job() + Dispatchers.Default)
         vm.runScan(
-            Universe(emptyList(), emptyMap(), emptyMap()),
+            Universe(emptyMap()),
             params(ScanMode.REBOUND_START), ScanSettings(1, false, ScanMode.REBOUND_START),
             25, 0, scope
         )

@@ -12,8 +12,8 @@ class CsvUniverseTest {
         val csv = "ticker,name,exchange\nBRK-B,Berkshire,NYSE\nAAPL,Apple,NASDAQ\n"
         val universe = CsvUniverse.parse(csv)
         assertEquals(listOf("BRK-B", "AAPL"), universe.tickers)
-        assertEquals(mapOf("BRK-B" to "Berkshire", "AAPL" to "Apple"), universe.names)
-        assertEquals(mapOf("BRK-B" to "NYSE", "AAPL" to "NASDAQ"), universe.exchanges)
+        assertEquals(mapOf("BRK-B" to "Berkshire", "AAPL" to "Apple"), universe.stocks.mapValues { it.value.name })
+        assertEquals(mapOf("BRK-B" to "NYSE", "AAPL" to "NASDAQ"), universe.stocks.mapValues { it.value.exchange })
     }
 
     @Test
@@ -27,7 +27,7 @@ class CsvUniverseTest {
     fun symbolColumnAndGermanName() {
         val universe = CsvUniverse.parse("symbol,aktienname\nMSFT,Microsoft\n")
         assertEquals(listOf("MSFT"), universe.tickers)
-        assertEquals("Microsoft", universe.names["MSFT"])
+        assertEquals("Microsoft", universe.stocks["MSFT"]?.name)
     }
 
     @Test
@@ -38,6 +38,6 @@ class CsvUniverseTest {
     @Test
     fun quotedNamesWithComma() {
         val universe = CsvUniverse.parse("ticker,name\nMSFT,\"Microsoft, Inc.\"\n")
-        assertEquals("Microsoft, Inc.", universe.names["MSFT"])
+        assertEquals("Microsoft, Inc.", universe.stocks["MSFT"]?.name)
     }
 }

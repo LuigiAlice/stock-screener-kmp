@@ -79,8 +79,12 @@ data class ScanResult(
     val settings: ScanSettings
 )
 
-data class Universe(
-    val tickers: List<String>,
-    val names: Map<String, String>,
-    val exchanges: Map<String, String>
+data class StockInfo(
+    val name: String = "—",
+    val exchange: String = ""
 )
+
+/** Ticker-keyed stock metadata; one entry keeps the universe fields together. */
+data class Universe(val stocks: Map<String, StockInfo>) {
+    val tickers: List<String> = stocks.keys.toList()
+}

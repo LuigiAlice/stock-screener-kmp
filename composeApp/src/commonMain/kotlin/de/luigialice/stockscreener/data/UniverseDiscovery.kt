@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener.data
 
 import de.luigialice.stockscreener.createYahooClient
+import de.luigialice.stockscreener.model.StockInfo
 import de.luigialice.stockscreener.model.Universe
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -12,6 +13,9 @@ private val skipNameRegex = Regex(
     "\\b(warrants?|rights?|units?|preferred|depositary|notes?|debentures?)\\b",
     RegexOption.IGNORE_CASE
 )
+
+private fun universeFromNames(names: Map<String, String>): Universe =
+    Universe(names.entries.sortedBy { it.key }.associate { (ticker, name) -> ticker to StockInfo(name) })
 
 /**
  * Ermittelt automatisch ein US-Aktien-Universum aus den offiziellen
@@ -29,11 +33,7 @@ class UniverseDiscovery(private val client: HttpClient = createYahooClient()) {
 
         if (entries.isEmpty()) error("Keine Aktien gefunden")
 
-        return Universe(
-            tickers = entries.keys.sorted(),
-            names = entries,
-            exchanges = entries.mapValues { "" }
-        )
+        return universeFromNames(entries)
     }
 
     /**
@@ -46,11 +46,7 @@ class UniverseDiscovery(private val client: HttpClient = createYahooClient()) {
 
         if (entries.isEmpty()) error("Keine S&P-500-Aktien gefunden")
 
-        return Universe(
-            tickers = entries.keys.sorted(),
-            names = entries,
-            exchanges = entries.mapValues { "" }
-        )
+        return universeFromNames(entries)
     }
 
     /** Nasdaq-100 (US, ohne Suffix); Komponentenliste ist ein eigener Artikel. */
@@ -76,11 +72,7 @@ class UniverseDiscovery(private val client: HttpClient = createYahooClient()) {
 
         if (entries.isEmpty()) error("Keine Aktien für $label gefunden")
 
-        return Universe(
-            tickers = entries.keys.sorted(),
-            names = entries,
-            exchanges = entries.mapValues { "" }
-        )
+        return universeFromNames(entries)
     }
 
     private suspend fun fetchLines(url: String): List<String> = fetchText(url).lines()

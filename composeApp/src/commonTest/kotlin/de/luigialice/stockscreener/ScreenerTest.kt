@@ -5,6 +5,7 @@ import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanSettings
+import de.luigialice.stockscreener.model.StockInfo
 import de.luigialice.stockscreener.model.Universe
 import de.luigialice.stockscreener.screener.Screener
 import kotlinx.datetime.DateTimeUnit
@@ -198,15 +199,15 @@ class ScreenerTest {
         val ok = List(80) { 100.0 + (it % 2) }
         assertNull(Screener.calcRow("AAA", "A", frame(ok), paramsStart.copy(days = 80)))
         assertNull(Screener.calcRow("AAA", "A", frame(List(100) { 100.0 + (it % 2) }, List(100) { 0.0 }), paramsStart))
-        assertNull(Screener.calcRow("AAA", "A", frame((0 until 100).map { 100.0 + it }), paramsStart))
-        assertNull(Screener.calcRow("AAA", "A", frame(List(100) { 100.0 }), paramsStart))
+        assertClose(100.0, Screener.calcRow("AAA", "A", frame((0 until 100).map { 100.0 + it }), paramsStart)!!.rsi14)
+        assertClose(50.0, Screener.calcRow("AAA", "A", frame(List(100) { 100.0 }), paramsStart)!!.rsi14)
         val days60 = List(80) { 100.0 + (it % 2) }
         assertTrue(Screener.calcRow("AAA", "A", frame(days60), paramsStart.copy(days = 60, maxPerf = -100.0)) != null)
     }
 
     @Test
     fun scanSortsAndCollectsFailed() {
-        val universe = Universe(listOf("AAA", "BBB", "XXX"), mapOf("AAA" to "Alpha", "BBB" to "Beta", "XXX" to "X"), emptyMap())
+        val universe = Universe(mapOf("AAA" to StockInfo("Alpha"), "BBB" to StockInfo("Beta"), "XXX" to StockInfo("X")))
         val bars = mapOf("AAA" to frameRecovery(), "BBB" to frame12m(130.0))
         val result = Screener.scan(
             universe,

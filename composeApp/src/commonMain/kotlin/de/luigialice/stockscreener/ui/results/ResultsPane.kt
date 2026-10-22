@@ -58,6 +58,7 @@ import de.luigialice.stockscreener.ui.fmtDate
 import de.luigialice.stockscreener.ui.results.buildImportedResult
 import de.luigialice.stockscreener.ui.results.parseHitsCsv
 import de.luigialice.stockscreener.ui.theme.AppColors
+import de.luigialice.stockscreener.ui.rememberBars
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.minus
 import kotlinx.serialization.Serializable

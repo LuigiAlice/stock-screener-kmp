@@ -1,6 +1,7 @@
 package de.luigialice.stockscreener.ui
 
 import de.luigialice.stockscreener.data.BarCache
+import de.luigialice.stockscreener.data.BarHistoryLoader
 import de.luigialice.stockscreener.data.YahooApi
 import de.luigialice.stockscreener.data.YahooHttpException
 import de.luigialice.stockscreener.data.createBarStore
@@ -11,11 +12,9 @@ import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanResult
 import de.luigialice.stockscreener.model.ScanRow
 import de.luigialice.stockscreener.model.ScanSettings
+import de.luigialice.stockscreener.model.StockInfo
 import de.luigialice.stockscreener.model.Universe
 import de.luigialice.stockscreener.screener.Screener
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +24,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -56,8 +54,8 @@ class ScanViewModel(
     val state: StateFlow<ScanState> = _state
     private val _universe = MutableStateFlow<Universe?>(null)
     val universe: StateFlow<Universe?> = _universe
-    private val prices = MutableStateFlow<Map<String, List<Bar>>>(emptyMap())
-    private val barJobs = mutableMapOf<String, Job>()
+    private val barHistory = BarHistoryLoader(api, barCache)
+    internal val bars: StateFlow<Map<String, List<Bar>>> get() = barHistory.bars
     private var job: Job? = null
     private var lastUniverse: Universe? = null
     private var lastApplied: Pair<ScanParams, ScanSettings>? = null
@@ -83,8 +81,7 @@ class ScanViewModel(
         runId++
         downloadRunning = false
         job?.cancel()
-        barJobs.values.forEach { it.cancel() }
-        barJobs.clear()
+        barHistory.cancelLoads()
         // Abbrechen eines lokalen Re-Scores darf die vorhandene Ergebnisliste nicht löschen
         _state.value = restore ?: ScanState.Idle
     }
@@ -121,13 +118,9 @@ class ScanViewModel(
         runId++
         downloadRunning = false
         job?.cancel()
-        prices.value = emptyMap()
+        barHistory.clear()
         val rows = result.rows
-        val uni = Universe(
-            tickers = rows.map { it.ticker }.distinct(),
-            names = rows.associate { it.ticker to it.name },
-            exchanges = rows.associate { it.ticker to "" }
-        )
+        val uni = Universe(rows.associate { it.ticker to StockInfo(it.name) })
         _universe.value = uni
         lastUniverse = uni
         lastApplied = null
@@ -140,22 +133,7 @@ class ScanViewModel(
 
     /** Bars für einen Ticker nachladen (z. B. nach Treffer-CSV-Import); Cache-first. */
     fun loadBars(ticker: String, scope: CoroutineScope) {
-        if (prices.value[ticker] != null || barJobs[ticker]?.isActive == true) return
-        barJobs[ticker] = scope.launch {
-            try {
-                val bars = barCache.freshBars(ticker)
-                    ?: withContext(Dispatchers.Default) {
-                        runCatching { api.fetchBars(ticker) }.getOrNull().also { if (!it.isNullOrEmpty()) barCache.store(ticker, it) }
-                    }
-                if (!bars.isNullOrEmpty()) prices.update { it + (ticker to bars) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // ignorieren: Chart bleibt leer
-            } finally {
-                barJobs.remove(ticker)
-            }
-        }
+        barHistory.load(ticker, scope)
     }
 
     fun runScan(
@@ -166,7 +144,8 @@ class ScanViewModel(
         pauseSeconds: Int,
         scope: CoroutineScope
     ) {
-        if (universe.tickers.isEmpty()) {
+        val tickers = universe.tickers
+        if (tickers.isEmpty()) {
             runId++
             downloadRunning = false
             job?.cancel()
@@ -180,16 +159,16 @@ class ScanViewModel(
         lastApplied = params to settings
         _universe.value = universe
         downloadRunning = true
-        _state.value = ScanState.Running(0, universe.tickers.size, "")
-        prices.value = emptyMap()
+        _state.value = ScanState.Running(0, tickers.size, "")
+        barHistory.clear()
         job = scope.launch {
             try {
                 val rows = mutableListOf<ScanRow>()
                 val failed = mutableMapOf<String, FailedReason>()
                 val loadedPrices = mutableMapOf<String, List<Bar>>()
-                val total = universe.tickers.size
+                val total = tickers.size
 
-                universe.tickers.chunked(batchSize.coerceAtLeast(1)).forEachIndexed { batchIndex, batch ->
+                tickers.chunked(batchSize.coerceAtLeast(1)).forEachIndexed { batchIndex, batch ->
                     // Ticker eines Batches parallel laden; Batch-Größe = Parallelität; Cache-first
                     var networkFetches = 0
                     val batchResults: List<Pair<String, FetchOutcome>> = batch.map { ticker ->
@@ -216,7 +195,8 @@ class ScanViewModel(
                                 failed[ticker] = outcome.reason ?: FailedReason.NO_DATA
                             else -> {
                                 barCache.store(ticker, outcome.bars)
-                                val row = Screener.calcRow(ticker, universe.names[ticker] ?: "—", outcome.bars, params, universe.exchanges[ticker] ?: "")
+                                val stock = universe.stocks[ticker] ?: StockInfo()
+                                val row = Screener.calcRow(ticker, stock.name, outcome.bars, params, stock.exchange)
                                 if (row == null) failed[ticker] = FailedReason.NO_DATA
                                 else { rows.add(row); loadedPrices[ticker] = outcome.bars }
                             }
@@ -225,7 +205,7 @@ class ScanViewModel(
 
                     // Inkrementelles Zwischenergebnis nach jedem Batch (nur für den aktuellen Lauf)
                     if (!isCurrent(myRun)) return@launch
-                    prices.value = loadedPrices.toMap()
+                    barHistory.replaceFromScan(loadedPrices)
                     val done = ScanState.Done(
                         ScanResult(
                             rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
@@ -277,7 +257,7 @@ class ScanViewModel(
         if (downloadRunning) return // echter Download läuft → der Scan erledigt das
         val signature = params to settings
         if (signature == lastApplied) return
-        if (prices.value.isEmpty()) {
+        if (barHistory.bars.value.isEmpty()) {
             runScan(uni, params, settings, batchSize, pauseSeconds, scope)
         } else {
             runId++
@@ -289,16 +269,18 @@ class ScanViewModel(
             // Fortschritt über Done-Snapshots pro Batch (isScanning zeigt den Balken).
             job = scope.launch {
                 try {
-                    val loaded = prices.value
+                    val loaded = barHistory.bars.value
                     val rows = mutableListOf<ScanRow>()
-                    val total = uni.tickers.size
+                    val securities = uni.stocks.entries.toList()
+                    val total = securities.size
                     var lastEmit = 0L
-                    val chunks = uni.tickers.chunked(batchSize.coerceAtLeast(1))
+                    val chunkSize = batchSize.coerceAtLeast(1)
+                    val chunks = securities.chunked(chunkSize)
                     chunks.forEachIndexed { i, chunk ->
                         val chunkRows = withContext(Dispatchers.Default) {
-                            chunk.mapNotNull { ticker ->
+                            chunk.mapNotNull { (ticker, stock) ->
                                 loaded[ticker]?.let { bars ->
-                                    Screener.calcRow(ticker, uni.names[ticker] ?: "—", bars, params, uni.exchanges[ticker] ?: "")
+                                    Screener.calcRow(ticker, stock.name, bars, params, stock.exchange)
                                 }
                             }
                         }
@@ -313,10 +295,10 @@ class ScanViewModel(
                                 ScanResult(
                                     rows = rows.sortedWith(compareByDescending<ScanRow> { it.score }.thenByDescending { it.relVolume }),
                                     // Fehlerursachen des Downloads beibehalten (nur Ticker dieses Universums)
-                                    failed = lastFailed.filterKeys { it in loaded },
+                                    failed = lastFailed.filterKeys { it in uni.stocks },
                                     settings = settings
                                 ),
-                                scanned = ((i + 1) * chunk.size).coerceAtMost(total),
+                                scanned = (i * chunkSize + chunk.size).coerceAtMost(total),
                                 total = total
                             )
                             if (isLast) lastCompleteState = done
@@ -335,12 +317,6 @@ class ScanViewModel(
     private fun isCurrent(run: Int): Boolean = run == runId && job?.isActive != false
 
     /** Sind bereits Kursdaten geladen (nicht-reaktiv, z. B. für Tests)? */
-    fun hasBars(): Boolean = prices.value.isNotEmpty()
+    fun hasBars(): Boolean = barHistory.bars.value.isNotEmpty()
 
-    /** Bars als beobachtbaren State (recomponiert beim Nachladen). */
-    @Composable
-    fun rememberBars(ticker: String): List<Bar> = prices.collectAsState().value[ticker] ?: emptyList()
-
-    @Composable
-    fun rememberHasBars(): Boolean = prices.collectAsState().value.isNotEmpty()
 }

@@ -45,6 +45,7 @@ import de.luigialice.stockscreener.model.DEFAULT_SCORE_MIN
 import de.luigialice.stockscreener.model.ONGOING_RSI_BAND
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanSettings
+import de.luigialice.stockscreener.model.StockInfo
 import de.luigialice.stockscreener.model.Universe
 import de.luigialice.stockscreener.model.scanParams
 import de.luigialice.stockscreener.pickCsvText
@@ -56,6 +57,7 @@ import de.luigialice.stockscreener.ui.ScanViewModel
 import de.luigialice.stockscreener.ui.SliderRow
 import de.luigialice.stockscreener.ui.fmt
 import de.luigialice.stockscreener.ui.isScanning
+import de.luigialice.stockscreener.ui.rememberHasBars
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -116,7 +118,7 @@ internal fun SettingsPane(
             if (viewModel.downloadRunning()) {
                 // Laufenden Download mit dem neuen Modus neu starten:
                 // bereits geladene Ticker kommen aus dem Cache und kosten keine Zeit
-                val uni = activeUniverse ?: Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
+                val uni = activeUniverse ?: Universe(tickers.associateWith { StockInfo() })
                 viewModel.runScan(uni, paramsFor(m), settingsFor(m), batchSize, pause, scope)
             } else {
                 // lokaler Re-Score (auch wenn gerade ein Re-Score läuft: der neue überholt den alten)
@@ -244,7 +246,7 @@ internal fun SettingsPane(
             onClick = {
                 val uni = activeUniverse ?: run {
                     val tickers = parseTickers(tickerText)
-                    Universe(tickers, tickers.associateWith { "—" }, tickers.associateWith { "" })
+                    Universe(tickers.associateWith { StockInfo() })
                 }
                 viewModel.runScan(uni, paramsFor(mode), settingsFor(mode), batchSize, pause, scope)
             },
