@@ -34,14 +34,15 @@ class ResultsTableTest {
     fun rendersRowsCriteriaAndScore() = runSkikoComposeUiTest(size = Size(1600f, 900f)) {
         setContent {
             AppTheme {
-                ResultsTable(rows, selectedIndex = 0, onSelect = {}, uriHandler = RecordingUriHandler(), tableModifier = Modifier)
+                ResultsTable(rows, selectedIndex = 0, onSelect = {}, uriHandler = RecordingUriHandler(), tableModifier = Modifier, criteriaKeys = rows.first().criteria.keys.toList())
             }
         }
         onNodeWithText("AAPL").assertExists()
         onNodeWithText("Microsoft").assertExists()
         // Kriterien laufen als „Ja“/„Nein“ je Zeile — beide Zeilen enthalten beide Texte
-        onAllNodesWithText("Ja").assertCountEquals(2)
+        // Zusätzlich tragen die Umschalter der Kriteriums-Köpfe den Text „Ja"
         onAllNodesWithText("Nein").assertCountEquals(2)
+        onAllNodesWithText("Ja").assertCountEquals(2 + rows.first().criteria.size)
         onNodeWithText("6/8").assertExists()
     }
 
@@ -50,7 +51,7 @@ class ResultsTableTest {
         var selected = -1
         setContent {
             AppTheme {
-                ResultsTable(rows, selectedIndex = 0, onSelect = { selected = it }, uriHandler = RecordingUriHandler(), tableModifier = Modifier)
+                ResultsTable(rows, selectedIndex = 0, onSelect = { selected = it }, uriHandler = RecordingUriHandler(), tableModifier = Modifier, criteriaKeys = rows.first().criteria.keys.toList())
             }
         }
         onNodeWithText("MSFT").performClick()
@@ -64,7 +65,7 @@ class ResultsTableTest {
         val handler = RecordingUriHandler()
         setContent {
             AppTheme {
-                ResultsTable(rows, selectedIndex = 0, onSelect = {}, uriHandler = handler, tableModifier = Modifier)
+                ResultsTable(rows, selectedIndex = 0, onSelect = {}, uriHandler = handler, tableModifier = Modifier, criteriaKeys = rows.first().criteria.keys.toList())
             }
         }
         onAllNodesWithText("Summary")[0].performClick()

@@ -2,10 +2,14 @@ package de.luigialice.stockscreener.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.UriHandler
@@ -66,6 +70,19 @@ internal fun fmtIsoDate(iso: String?): String {
 internal fun SliderRow(label: String, valueText: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
     Text("$label: $valueText", fontSize = 13.sp)
     Slider(value, valueRange = min..max, onValueChange = onChange)
+}
+
+/**
+ * Label und Regler in einer Zeile – schmaler als [SliderRow], wenn die Höhe knapp ist
+ * (z. B. Ergebnis-Leiste auf dem iPad). Das Label nimmt seine natürliche Breite ein,
+ * der Regler füllt den Rest der Zeile.
+ */
+@Composable
+internal fun InlineSliderRow(label: String, valueText: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text("$label: $valueText", fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(end = 8.dp))
+        Slider(value, valueRange = min..max, onValueChange = onChange, modifier = Modifier.weight(1f))
+    }
 }
 
 /** Sekundärer Hinweistext in gedämpftem Ton — das gemeinsame Muster aller Nebeninfos. */

@@ -11,11 +11,11 @@ data class Bar(val date: LocalDate, val close: Double, val volume: Double)
 
 data class ScanParams(
     val mode: ScanMode,
-    val days: Int = 21,
-    val maxPerf: Double = -12.0,
-    val rsiMin: Double = 35.0,
-    val rsiMax: Double = 48.0,
-    val minVolume: Double = 1.3
+    val days: Int = 30,
+    val maxPerf: Double = -8.0,
+    val rsiMin: Double = 30.0,
+    val rsiMax: Double = 60.0,
+    val minVolume: Double = 1.0
 )
 
 /** Fester RSI-Bereich des Modus "Laufende Erholung" (nicht einstellbar). */
@@ -62,13 +62,21 @@ data class ScanRow(
 /**
  * Startwert des Trefferfilters: entscheidet allein die Anzeige ([ScanResult.settings]),
  * der Scan selbst filtert nicht nach Score. Per Regler in den Ergebnissen verschiebbar.
+ * Muss-Kriterien sind im Score bereits enthalten (3 Punkte), deshalb bewertet eine 4
+ * "ein Zusatzkriterium mehr" statt "4 von 8".
  */
-const val DEFAULT_SCORE_MIN: Int = 5
+const val DEFAULT_SCORE_MIN: Int = 4
 
 data class ScanSettings(
     val scoreMin: Int,
     val onlyBelow12m: Boolean,
-    val mode: ScanMode
+    val mode: ScanMode,
+    /**
+     * Fenster der Spalte „Perf %" in Handelstagen (der Rückgangs-Regler) – damit die Tabelle
+     * anzeigen kann, über welchen Zeitraum die Performance gerechnet ist. Ohne Performance
+     * (Modus Laufende Erholung, CSV-Import) null, dann bleibt die Spalte bei „Perf %".
+     */
+    val perfDays: Int? = null
 )
 
 enum class FailedReason { RATE_LIMITED, NETWORK_ERROR, NO_DATA }
@@ -88,3 +96,12 @@ data class StockInfo(
 data class Universe(val stocks: Map<String, StockInfo>) {
     val tickers: List<String> = stocks.keys.toList()
 }
+
+/**
+ * Anzeigename: der aus dem Universum, sonst der aus den Kursdaten. Manuell eingegebene Ticker
+ * (Default-Liste) haben keinen Namen – Yahoo liefert ihn in den Chart-Metadaten.
+ */
+fun StockInfo.displayName(fetched: String? = null): String =
+    name.takeIf { it.isNotBlank() && it != "—" }
+        ?: fetched?.takeIf { it.isNotBlank() }
+        ?: name

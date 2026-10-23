@@ -46,13 +46,14 @@ import de.luigialice.stockscreener.exportCsv
 import de.luigialice.stockscreener.model.FailedReason
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanRow
+import de.luigialice.stockscreener.model.ScanSettings
 import de.luigialice.stockscreener.pickCsvText
 import de.luigialice.stockscreener.ui.DimText
 import de.luigialice.stockscreener.ui.LinkText
 import de.luigialice.stockscreener.ui.Metric
 import de.luigialice.stockscreener.ui.ScanState
 import de.luigialice.stockscreener.ui.ScanViewModel
-import de.luigialice.stockscreener.ui.SliderRow
+import de.luigialice.stockscreener.ui.InlineSliderRow
 import de.luigialice.stockscreener.ui.chart.LineChart
 import de.luigialice.stockscreener.ui.fmtDate
 import de.luigialice.stockscreener.ui.results.buildImportedResult
@@ -76,6 +77,11 @@ import kotlinx.serialization.json.Json
 internal class ResultsUiState(private val prefs: BarStore? = createSettingsStore()) {
     var scoresByMode by mutableStateOf(loadScores(prefs))
     var selectedTicker by mutableStateOf<String?>(null)
+    /** Vom Nutzer als Muss markierte Kriterien je Modus – alle Kriterien starten als Kann. */
+    var mussByMode by mutableStateOf(loadMuss(prefs))
+    /** Sortierschlüssel = Spaltenkopf bzw. Kriteriumsname; null = Score-Reihenfolge. */
+    var sortKey by mutableStateOf<String?>(null)
+    var sortDescending by mutableStateOf(true)
 
     /** Trefferfilter-Position für den Modus merken und dauerhaft speichern. */
     fun rememberScore(mode: ScanMode, score: Int) {
@@ -87,14 +93,40 @@ internal class ResultsUiState(private val prefs: BarStore? = createSettingsStore
             )
         }
     }
+
+    /** Kriterium zwischen Kann (zählt zum Score) und Muss (Filter) umschalten. */
+    fun toggleMuss(mode: ScanMode, criterion: String) {
+        val current = mussByMode[mode] ?: emptySet()
+        val next = if (criterion in current) current - criterion else current + criterion
+        mussByMode = mussByMode + (mode to next)
+        runCatching {
+            prefs?.save(
+                MUSS_KEY,
+                prefsJson.encodeToString(MussCriteria.serializer(), MussCriteria(mussByMode.mapKeys { it.key.name }.mapValues { it.value.toList() }))
+            )
+        }
+    }
+
+    /** Spaltenkopf-Klick: absteigend -> aufsteigend -> zurück zur Score-Reihenfolge. */
+    fun toggleSort(key: String) {
+        when {
+            sortKey != key -> { sortKey = key; sortDescending = true }
+            sortDescending -> sortDescending = false
+            else -> { sortKey = null; sortDescending = true }
+        }
+    }
 }
 
 internal const val SCORES_KEY = "trefferfilter"
+internal const val MUSS_KEY = "musskriterien"
 
 private val prefsJson = Json { ignoreUnknownKeys = true }
 
 @Serializable
 private data class FilterPositions(val positions: Map<String, Int> = emptyMap())
+
+@Serializable
+private data class MussCriteria(val positions: Map<String, List<String>> = emptyMap())
 
 private fun loadScores(prefs: BarStore?): Map<ScanMode, Int> {
     val raw = prefs?.load(SCORES_KEY) ?: return emptyMap()
@@ -102,6 +134,53 @@ private fun loadScores(prefs: BarStore?): Map<ScanMode, Int> {
     return parsed.positions.mapNotNull { (name, score) ->
         ScanMode.entries.firstOrNull { it.name == name }?.let { it to score.coerceIn(1, it.maxScore) }
     }.toMap()
+}
+
+private fun loadMuss(prefs: BarStore?): Map<ScanMode, Set<String>> {
+    val raw = prefs?.load(MUSS_KEY) ?: return emptyMap()
+    val parsed = runCatching { prefsJson.decodeFromString(MussCriteria.serializer(), raw) }.getOrNull() ?: return emptyMap()
+    return parsed.positions.mapNotNull { (name, criteria) ->
+        ScanMode.entries.firstOrNull { it.name == name }?.let { it to criteria.toSet() }
+    }.toMap()
+}
+
+/**
+ * Treffer: alle als Muss markierten Kriterien erfüllt, Score mindestens auf dem Trefferfilter,
+ * 12M-Regel eingehalten. Fehlt einem Kriterium die Spalte (z. B. alter CSV-Import), blockiert
+ * es nicht – nur vorhandene Muss-Kriterien werden geprüft.
+ */
+internal fun List<ScanRow>.hits(displayScore: Int, settings: ScanSettings, muss: Set<String> = emptySet()): List<ScanRow> =
+    filter { row ->
+        row.score >= displayScore &&
+            (!settings.onlyBelow12m || row.below12m == true) &&
+            row.criteria.filterKeys { it in muss }.values.all { it }
+    }
+
+/**
+ * Sortiert nach einer Spalte ([key] = Spaltenkopf bzw. Kriteriumsname); [key] null lässt die
+ * Reihenfolge unverändert (Score-Absteigend aus dem Scan). Sortierung ist stabil, gleiche
+ * Werte behalten also ihre bisherige Rangfolge.
+ */
+internal fun List<ScanRow>.sortedByColumn(key: String?, descending: Boolean): List<ScanRow> {
+    if (key == null) return this
+    val cmp = columnComparator(key)
+    return sortedWith(if (descending) cmp.reversed() else cmp)
+}
+
+private fun columnComparator(key: String): Comparator<ScanRow> = when (key) {
+    "Ticker" -> Comparator { a, b -> a.ticker.compareTo(b.ticker, ignoreCase = true) }
+    "Aktienname" -> Comparator { a, b -> a.name.compareTo(b.name, ignoreCase = true) }
+    "Kurs" -> Comparator { a, b -> compareValues(a.price, b.price) }
+    "Perf %" -> Comparator { a, b -> compareValues(a.performance, b.performance) }
+    "12M %" -> Comparator { a, b -> compareValues(a.perf12m, b.perf12m) }
+    "RSI" -> Comparator { a, b -> compareValues(a.rsi14, b.rsi14) }
+    "relVol" -> Comparator { a, b -> compareValues(a.relVolume, b.relVolume) }
+    "SMA20 %" -> Comparator { a, b -> compareValues(a.sma20Pct, b.sma20Pct) }
+    "SMA50 %" -> Comparator { a, b -> compareValues(a.sma50Pct, b.sma50Pct) }
+    "Score" -> Comparator { a, b -> compareValues(a.score, b.score) }
+    "Tag" -> Comparator { a, b -> compareValues(a.lastTradingDay, b.lastTradingDay) }
+    // Kriteriums-Spalte: erfüllt (true) vor nicht erfüllt (false) beim Absteigen
+    else -> Comparator { a, b -> compareValues(a.criteria[key] == true, b.criteria[key] == true) }
 }
 
 @Composable
@@ -113,9 +192,10 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
     // Auswahl über Ticker statt Index, damit sie Re-Scores übersteht
     val selectedTicker = ui.selectedTicker
     val uriHandler = LocalUriHandler.current
+    val muss = ui.mussByMode[mode] ?: emptySet()
     val hits = result.rows
-        .filter { it.score >= displayScore }
-        .filter { !result.settings.onlyBelow12m || it.below12m == true }
+        .hits(displayScore, result.settings, muss)
+        .sortedByColumn(ui.sortKey, ui.sortDescending)
     val selectedIndex = hits.indexOfFirst { it.ticker == selectedTicker }.takeIf { it >= 0 } ?: 0
 
     // Pfeiltasten-Navigation: die ganze Ergebnis-Spalte hält den Fokus (Klicks in sie stehlen ihn nicht),
@@ -150,7 +230,8 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
             Metric("Treffer", hits.size.toString())
             Metric("Modus", result.settings.mode.label)
         }
-        SliderRow(
+        // Label und Regler in einer Zeile: spart Höhe für Tabelle und Chart (iPad)
+        InlineSliderRow(
             "Trefferfilter (ohne neuen Scan)", "$displayScore",
             displayScore.toFloat(), 1f, result.settings.mode.maxScore.toFloat()
         ) { ui.rememberScore(mode, it.toInt()) }
@@ -175,15 +256,25 @@ internal fun ResultsPane(done: ScanState.Done, viewModel: ScanViewModel, ui: Res
         Spacer(Modifier.height(8.dp))
         Text("Treffer (${hits.size})", fontWeight = FontWeight.SemiBold)
         if (hits.isEmpty()) {
-            DimText("Keine Treffer. Trefferfilter senken oder Regeln anpassen.", fontSize = 14.sp)
-        } else {
-            ResultsTable(
-                hits,
-                selectedIndex = selectedIndex.coerceIn(0, hits.size - 1),
-                onSelect = { i -> ui.selectedTicker = hits.getOrNull(i)?.ticker },
-                uriHandler = uriHandler,
-                tableModifier = tableModifier
-            )
+            DimText("Keine Treffer. Trefferfilter senken, Regeln anpassen oder Muss-Kriterien lockern.", fontSize = 14.sp)
+        }
+        // Tabelle auch ohne Treffer rendern: sonst verschwinden Sortierung und die
+        // Kann/Muss-Umschalter mit dem letzten gesetzten Muss-Kriterium und sind weg.
+        ResultsTable(
+            hits,
+            selectedIndex = selectedIndex.coerceIn(0, (hits.size - 1).coerceAtLeast(0)),
+            onSelect = { i -> ui.selectedTicker = hits.getOrNull(i)?.ticker },
+            uriHandler = uriHandler,
+            tableModifier = tableModifier,
+            sortKey = ui.sortKey,
+            sortDescending = ui.sortDescending,
+            onSort = ui::toggleSort,
+            muss = muss,
+            onToggleMuss = { criterion -> ui.toggleMuss(mode, criterion) },
+            criteriaKeys = result.rows.firstOrNull()?.criteria?.keys?.toList().orEmpty(),
+            perfDays = result.settings.perfDays
+        )
+        if (hits.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             if (csvFileDialogsAvailable()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

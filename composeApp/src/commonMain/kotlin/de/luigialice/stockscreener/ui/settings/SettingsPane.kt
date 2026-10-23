@@ -44,6 +44,7 @@ import de.luigialice.stockscreener.data.UniverseDiscovery
 import de.luigialice.stockscreener.model.DEFAULT_SCORE_MIN
 import de.luigialice.stockscreener.model.ONGOING_RSI_BAND
 import de.luigialice.stockscreener.model.ScanMode
+import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanSettings
 import de.luigialice.stockscreener.model.StockInfo
 import de.luigialice.stockscreener.model.Universe
@@ -63,19 +64,43 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * Zustand der Rebound-Regeln (die Regler samt 12M-Haken). [reset] stellt alle Werte auf die
+ * Defaults zurück – die Werte selbst liegen in [ScanParams], damit es nur eine Quelle gibt.
+ */
+internal class ReboundRulesState(private val defaults: ScanParams = ScanParams(ScanMode.REBOUND_START)) {
+    var days by mutableStateOf(defaults.days.toFloat())
+    var maxPerf by mutableStateOf(defaults.maxPerf.toFloat())
+    var rsiRange by mutableStateOf(defaults.rsiMin.toFloat()..defaults.rsiMax.toFloat())
+    var minVolume by mutableStateOf(defaults.minVolume.toFloat())
+    var onlyBelow12m by mutableStateOf(true)
+
+    fun reset() {
+        days = defaults.days.toFloat()
+        maxPerf = defaults.maxPerf.toFloat()
+        rsiRange = defaults.rsiMin.toFloat()..defaults.rsiMax.toFloat()
+        minVolume = defaults.minVolume.toFloat()
+        onlyBelow12m = true
+    }
+}
+
 @Composable
 internal fun SettingsPane(
     state: ScanState,
     viewModel: ScanViewModel,
     scope: CoroutineScope,
     modifier: Modifier = Modifier,
+) = SettingsPane(state, viewModel, scope, remember { ReboundRulesState() }, modifier)
+
+@Composable
+internal fun SettingsPane(
+    state: ScanState,
+    viewModel: ScanViewModel,
+    scope: CoroutineScope,
+    rules: ReboundRulesState,
+    modifier: Modifier = Modifier,
 ) {
     var mode by remember { mutableStateOf(ScanMode.REBOUND_START) }
-    var days by remember { mutableStateOf(21f) }
-    var maxPerf by remember { mutableStateOf(-12f) }
-    var rsiRange by remember { mutableStateOf(35f..48f) }
-    var minVolume by remember { mutableStateOf(1.3f) }
-    var onlyBelow12m by remember { mutableStateOf(true) }
     var batchSize by remember { mutableStateOf(25) }
     var pause by remember { mutableStateOf(1) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -83,8 +108,13 @@ internal fun SettingsPane(
     val activeUniverse by viewModel.universe.collectAsState()
 
     fun paramsFor(m: ScanMode) =
-        scanParams(m, days.toInt(), maxPerf.toDouble(), rsiRange.start.toDouble(), rsiRange.endInclusive.toDouble(), minVolume.toDouble())
-    fun settingsFor(m: ScanMode) = ScanSettings(DEFAULT_SCORE_MIN.coerceAtMost(m.maxScore), onlyBelow12m, m)
+        scanParams(m, rules.days.toInt(), rules.maxPerf.toDouble(), rules.rsiRange.start.toDouble(), rules.rsiRange.endInclusive.toDouble(), rules.minVolume.toDouble())
+    fun settingsFor(m: ScanMode) = ScanSettings(
+        DEFAULT_SCORE_MIN.coerceAtMost(m.maxScore),
+        rules.onlyBelow12m,
+        m,
+        perfDays = rules.days.toInt().takeIf { m == ScanMode.REBOUND_START }
+    )
 
     Column(modifier.padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -136,19 +166,20 @@ internal fun SettingsPane(
         Spacer(Modifier.height(8.dp))
         Text("Rebound-Regeln", fontWeight = FontWeight.SemiBold)
         if (mode == ScanMode.REBOUND_START) {
-            SliderRow("Rückgang (Handelstage)", "${days.toInt()}", days, 10f, 60f) { days = it }
-            SliderRow("Max. Performance im Zeitraum (%)", "${maxPerf.toInt()} %", maxPerf, -60f, 0f) { maxPerf = it }
-            Text("RSI-Bereich: ${rsiRange.start.toInt()} – ${rsiRange.endInclusive.toInt()}")
-            RangeSlider(rsiRange, valueRange = 10f..70f, onValueChange = { rsiRange = it })
-            SliderRow("Min. relatives Volumen", fmt(minVolume.toDouble(), 1), minVolume, 0.5f, 4f) { minVolume = it }
+            SliderRow("Rückgang (Handelstage)", "${rules.days.toInt()}", rules.days, 10f, 60f) { rules.days = it }
+            SliderRow("Max. Performance im Zeitraum (%)", "${rules.maxPerf.toInt()} %", rules.maxPerf, -60f, 0f) { rules.maxPerf = it }
+            Text("RSI-Bereich: ${rules.rsiRange.start.toInt()} – ${rules.rsiRange.endInclusive.toInt()}")
+            RangeSlider(rules.rsiRange, valueRange = 10f..70f, onValueChange = { rules.rsiRange = it })
+            SliderRow("Min. relatives Volumen", fmt(rules.minVolume.toDouble(), 1), rules.minVolume, 0.5f, 4f) { rules.minVolume = it }
         } else {
             DimText("RSI-Bereich: ${ONGOING_RSI_BAND.start.toInt()} – ${ONGOING_RSI_BAND.endInclusive.toInt()} (fest)")
             DimText("Kriterien: 12M-Verlierer, über SMA20/SMA50, höheres Tief, RSI im Band.")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = onlyBelow12m, onCheckedChange = { onlyBelow12m = it })
+            Checkbox(checked = rules.onlyBelow12m, onCheckedChange = { rules.onlyBelow12m = it })
             Text("Nur Aktien unter Kurs von vor 12 Monaten", fontSize = 13.sp)
         }
+        TextButton(onClick = { rules.reset() }) { Text("Regeln zurücksetzen", fontSize = 13.sp) }
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
         Text("Universum", fontWeight = FontWeight.SemiBold)
@@ -256,7 +287,7 @@ internal fun SettingsPane(
         // Regeländerungen sofort validieren: mit geladenen Kursen instant,
         // ohne Kurse (z. B. nach Import) einmaliger Download-Scan des aktiven Universums
         val hasBars = viewModel.rememberHasBars()
-        LaunchedEffect(mode, days, maxPerf, rsiRange, minVolume, onlyBelow12m, hasBars, activeUniverse, state.isScanning, tickerText) {
+        LaunchedEffect(mode, rules.days, rules.maxPerf, rules.rsiRange, rules.minVolume, rules.onlyBelow12m, hasBars, activeUniverse, state.isScanning, tickerText) {
             if (viewModel.downloadRunning()) return@LaunchedEffect // echter Download läuft
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return@LaunchedEffect

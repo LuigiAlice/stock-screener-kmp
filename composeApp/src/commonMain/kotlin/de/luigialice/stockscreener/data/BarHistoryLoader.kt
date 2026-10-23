@@ -46,7 +46,9 @@ internal class BarHistoryLoader(
             try {
                 val loaded = cache.freshBars(ticker)
                     ?: withContext(Dispatchers.Default) {
-                        api.fetchBars(ticker).also { if (it.isNotEmpty()) cache.store(ticker, it) }
+                        api.fetchBars(ticker).let { fetched ->
+                            fetched.bars.also { if (it.isNotEmpty()) cache.store(ticker, it, fetched.name) }
+                        }
                     }
                 if (requestGeneration == generation && loaded.isNotEmpty()) {
                     _bars.update { it + (ticker to loaded) }

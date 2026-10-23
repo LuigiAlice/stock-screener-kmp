@@ -52,4 +52,62 @@ class ResultsUiStateTest {
         assertEquals(4, state.scoresByMode[ScanMode.REBOUND_START])
         assertNull(ResultsUiState(null).scoresByMode[ScanMode.REBOUND_START]) // keine Persistenz, aber stabil
     }
+
+    @Test
+    fun allCriteriaStartAsKann() {
+        val state = ResultsUiState(InMemoryBarStore())
+        assertTrue(state.mussByMode.isEmpty())
+    }
+
+    @Test
+    fun toggleMussMarksAndUnmarksACriterion() {
+        val state = ResultsUiState(InMemoryBarStore())
+        state.toggleMuss(ScanMode.REBOUND_START, "RSI im Band")
+        assertEquals(setOf("RSI im Band"), state.mussByMode[ScanMode.REBOUND_START])
+
+        state.toggleMuss(ScanMode.REBOUND_START, "Volumen ok")
+        assertEquals(setOf("RSI im Band", "Volumen ok"), state.mussByMode[ScanMode.REBOUND_START])
+
+        state.toggleMuss(ScanMode.REBOUND_START, "RSI im Band") // wieder abwählen
+        assertEquals(setOf("Volumen ok"), state.mussByMode[ScanMode.REBOUND_START])
+    }
+
+    @Test
+    fun mussMarksAreRememberedPerModeAcrossInstances() {
+        val store = InMemoryBarStore()
+        ResultsUiState(store).toggleMuss(ScanMode.REBOUND_START, "Perf-Kriterium")
+        val reloaded = ResultsUiState(store)
+        assertEquals(setOf("Perf-Kriterium"), reloaded.mussByMode[ScanMode.REBOUND_START])
+    }
+
+    @Test
+    fun sortTogglesDescendingAscendingAndBackToScore() {
+        val state = ResultsUiState(null)
+        assertNull(state.sortKey)
+
+        state.toggleSort("Kurs")
+        assertEquals("Kurs", state.sortKey)
+        assertEquals(true, state.sortDescending)
+
+        state.toggleSort("Kurs")
+        assertEquals("Kurs", state.sortKey)
+        assertEquals(false, state.sortDescending)
+
+        state.toggleSort("Kurs")
+        assertNull(state.sortKey, "dritter Klick setzt auf die Score-Reihenfolge zurück")
+
+        state.toggleSort("Score")
+        assertEquals("Score", state.sortKey)
+        assertEquals(true, state.sortDescending)
+    }
+
+    @Test
+    fun sortingAnotherColumnStartsDescending() {
+        val state = ResultsUiState(null)
+        state.toggleSort("Kurs")
+        state.toggleSort("Kurs") // aufsteigend
+        state.toggleSort("RSI")
+        assertEquals("RSI", state.sortKey)
+        assertEquals(true, state.sortDescending)
+    }
 }

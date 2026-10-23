@@ -13,9 +13,10 @@ class ColumnSortTest {
         price: Double = 100.0,
         score: Int = 5,
         rsi: Double = 40.0,
+        perf: Double? = null,
         criteria: Map<String, Boolean> = mapOf("RSI im Band" to true, "Über SMA20" to false),
     ) = ScanRow(
-        ticker = ticker, name = ticker, price = price, performance = null, perf12m = null,
+        ticker = ticker, name = ticker, price = price, performance = perf, perf12m = null,
         below12m = true, rsi14 = rsi, relVolume = 1.0, sma20Pct = 0.0, sma50Pct = 0.0,
         criteria = criteria, score = score, lastTradingDay = "2026-10-23",
         yahooChart = "", yahooSummary = "", google = ""
@@ -62,6 +63,16 @@ class ColumnSortTest {
     fun sortIsStableForEqualValues() {
         val equal = listOf(row("A", score = 5), row("B", score = 5), row("C", score = 5))
         assertEquals(listOf("A", "B", "C"), equal.sortedByColumn("Score", descending = true).map { it.ticker })
+    }
+
+    @Test
+    fun sortsByPerformanceOverTheWindow() {
+        // Der Spaltenkopf zeigt „Perf 30 T. %", sortiert wird über den stabilen Schlüssel
+        val rows = listOf(
+            row("A", perf = -5.0), row("B", perf = -20.0), row("C", perf = -12.0),
+        )
+        assertEquals(listOf("A", "C", "B"), rows.sortedByColumn("Perf %", descending = true).map { it.ticker })
+        assertEquals(listOf("B", "C", "A"), rows.sortedByColumn("Perf %", descending = false).map { it.ticker })
     }
 
     @Test

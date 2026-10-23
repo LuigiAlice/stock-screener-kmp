@@ -13,6 +13,7 @@ import de.luigialice.stockscreener.model.ScanResult
 import de.luigialice.stockscreener.model.ScanRow
 import de.luigialice.stockscreener.model.ScanSettings
 import de.luigialice.stockscreener.model.StockInfo
+import de.luigialice.stockscreener.model.displayName
 import de.luigialice.stockscreener.model.Universe
 import de.luigialice.stockscreener.screener.Screener
 import kotlinx.coroutines.CancellationException
@@ -43,7 +44,7 @@ expect abstract class PlatformViewModel()
 val ScanState.isScanning: Boolean
     get() = this is ScanState.Running || (this is ScanState.Done && scanned < total)
 
-private data class FetchOutcome(val bars: List<Bar>? = null, val reason: FailedReason? = null)
+private data class FetchOutcome(val bars: List<Bar>? = null, val name: String? = null, val reason: FailedReason? = null)
 
 class ScanViewModel(
     private val api: YahooApi = YahooApi(),
@@ -65,6 +66,9 @@ class ScanViewModel(
 
     /** Fehlerursachen des letzten Download-Scans (bleibt beim lokalen Re-Score erhalten). */
     private var lastFailed: Map<String, FailedReason> = emptyMap()
+
+    /** Aus den Kursdaten übernommene Namen – für Universen ohne eigene (manuelle Ticker). */
+    private val fetchedNames = mutableMapOf<String, String>()
 
     /**
      * Lauf-Token: wird bei jedem neuen Scan/Re-Score/Load/Cancel erhöht.
@@ -174,10 +178,18 @@ class ScanViewModel(
                     val batchResults: List<Pair<String, FetchOutcome>> = batch.map { ticker ->
                         async {
                             val cached = barCache.freshBars(ticker)
-                            if (cached != null) return@async ticker to FetchOutcome(bars = cached)
+                            val cachedName = barCache.cachedName(ticker)
+                            // Ohne Namen aus Universum und Cache nochmal laden: sonst bleibt die
+                            // Spalte „Aktienname" leer (die Kursdaten kennen den Namen mit).
+                            val knownName = universe.stocks[ticker]
+                                ?.let { it.name.isNotBlank() && it.name != "—" } == true
+                            if (cached != null && (knownName || cachedName != null)) {
+                                return@async ticker to FetchOutcome(bars = cached, name = cachedName)
+                            }
                             networkFetches++
                             try {
-                                ticker to FetchOutcome(bars = withContext(Dispatchers.Default) { api.fetchBars(ticker) })
+                                val fetched = withContext(Dispatchers.Default) { api.fetchBars(ticker) }
+                                ticker to FetchOutcome(bars = fetched.bars, name = fetched.name)
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: YahooHttpException) {
@@ -194,9 +206,10 @@ class ScanViewModel(
                             outcome.bars.isNullOrEmpty() ->
                                 failed[ticker] = outcome.reason ?: FailedReason.NO_DATA
                             else -> {
-                                barCache.store(ticker, outcome.bars)
+                                barCache.store(ticker, outcome.bars, outcome.name)
                                 val stock = universe.stocks[ticker] ?: StockInfo()
-                                val row = Screener.calcRow(ticker, stock.name, outcome.bars, params, stock.exchange)
+                                outcome.name?.let { fetchedNames[ticker] = it }
+                                val row = Screener.calcRow(ticker, stock.displayName(outcome.name), outcome.bars, params, stock.exchange)
                                 if (row == null) failed[ticker] = FailedReason.NO_DATA
                                 else { rows.add(row); loadedPrices[ticker] = outcome.bars }
                             }
@@ -280,7 +293,7 @@ class ScanViewModel(
                         val chunkRows = withContext(Dispatchers.Default) {
                             chunk.mapNotNull { (ticker, stock) ->
                                 loaded[ticker]?.let { bars ->
-                                    Screener.calcRow(ticker, stock.name, bars, params, stock.exchange)
+                                    Screener.calcRow(ticker, stock.displayName(fetchedNames[ticker]), bars, params, stock.exchange)
                                 }
                             }
                         }

@@ -10,7 +10,12 @@ internal fun sampleRow(
     ticker: String = "AAPL",
     name: String = "Apple Inc",
     score: Int = 6,
-    criteria: Map<String, Boolean> = (1..8).associate { "Kriterium $it" to (it <= 6) },
+    // Echte Kriterien-Namen des Modus Erholungsbeginn: 6 erfüllt, 2 offen (wie score = 6)
+    criteria: Map<String, Boolean> = mapOf(
+        "Perf-Kriterium" to true, "RSI im Band" to true, "Über SMA20" to true,
+        "Unter SMA50" to true, "Volumen ok" to true, "RSI-Erholung" to true,
+        "SMA20-Cross" to false, "Höheres Tief" to false,
+    ),
 ): ScanRow = ScanRow(
     ticker = ticker,
     name = name,

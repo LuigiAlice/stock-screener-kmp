@@ -77,10 +77,25 @@ class ScreenerTest {
 
     @Test
     fun defaultSliderParams() {
-        val p = ScanParams(ScanMode.REBOUND_START, days = 21, maxPerf = -12.0, rsiMin = 35.0, rsiMax = 48.0, minVolume = 1.3)
-        val row = Screener.calcRow("AAA", "A", boundaryFrame(), p)!!
+        // Kalibrierte Defaults für Erholungsbeginn (echte Marktdaten, 20 Handelstage):
+        // die alten Werte (21, -12, 35-48, 1.3) lieferten nur an 25% der Tage Treffer.
+        val p = ScanParams(ScanMode.REBOUND_START)
+        assertEquals(30, p.days)
+        assertEquals(-8.0, p.maxPerf, 1e-9)
+        assertEquals(30.0, p.rsiMin, 1e-9)
+        assertEquals(60.0, p.rsiMax, 1e-9)
+        assertEquals(1.0, p.minVolume, 1e-9)
+    }
+
+    @Test
+    fun defaultParamsScoreTheBoundaryFrame() {
+        val row = Screener.calcRow("AAA", "A", boundaryFrame(), ScanParams(ScanMode.REBOUND_START))!!
         assertClose(PERF20_PCT, row.performance!!, 1e-6)
         assertEquals(4, row.score)
+        // Muss-Kriterien der Rebound-Regeln greifen -> die Zeile darf als Treffer erscheinen
+        assertEquals(true, row.criteria["Perf-Kriterium"])
+        assertEquals(true, row.criteria["RSI im Band"])
+        assertEquals(true, row.criteria["Volumen ok"])
     }
 
     @Test

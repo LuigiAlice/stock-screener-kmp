@@ -86,4 +86,18 @@ class BarCacheTest {
         assertNotNull(cache.freshBars("AAPL")) // In-Memory greift auch ohne Store
         assertNull(BarCache(null).freshBars("AAPL")) // aber keine Persistenz
     }
+
+    @Test
+    fun storesAndReloadsTheName() {
+        val store = InMemoryBarStore()
+        BarCache(store).store("AAPL", bars(190.0), name = "Apple Inc.")
+        assertEquals("Apple Inc.", BarCache(store).cachedName("AAPL"))
+    }
+
+    @Test
+    fun oldEntriesWithoutNameYieldNull() {
+        val store = InMemoryBarStore()
+        BarCache(store).store("AAPL", bars(190.0)) // ohne Namen, wie alte Einträge
+        assertNull(BarCache(store).cachedName("AAPL"))
+    }
 }

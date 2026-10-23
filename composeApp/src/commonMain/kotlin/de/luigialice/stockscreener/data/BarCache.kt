@@ -10,7 +10,12 @@ private val cacheJson = Json { ignoreUnknownKeys = true }
 internal data class CachedBar(val date: String, val close: Double, val volume: Double)
 
 @Serializable
-internal data class CachedBars(val fetchedAtMs: Long, val bars: List<CachedBar>)
+internal data class CachedBars(
+    val fetchedAtMs: Long,
+    val bars: List<CachedBar>,
+    /** Name aus den Chart-Metadaten; fehlt bei Einträgen aus älteren Versionen. */
+    val name: String? = null
+)
 
 /**
  * Persistenz für den Kurshistorie-Cache: schlüsselbasiert, Codierung Sache der
@@ -59,11 +64,15 @@ class BarCache(private val store: BarStore?, private val ttlMs: Long = 60 * 60 *
         Bar(kotlinx.datetime.LocalDate.parse(it.date), it.close, it.volume)
     }
 
-    fun store(ticker: String, bars: List<Bar>) {
+    /** Zum Ticker gespeicherter Name (aus den Kursdaten), sofern beim Ablegen bekannt. */
+    fun cachedName(ticker: String): String? = readEntry(ticker)?.name?.takeIf { it.isNotBlank() }
+
+    fun store(ticker: String, bars: List<Bar>, name: String? = null) {
         if (bars.isEmpty()) return
         val entry = CachedBars(
             fetchedAtMs = currentTimeMs(),
-            bars = bars.map { CachedBar(it.date.toString(), it.close, it.volume) }
+            bars = bars.map { CachedBar(it.date.toString(), it.close, it.volume) },
+            name = name?.takeIf { it.isNotBlank() }
         )
         runCatching {
             store?.save(barStoreKey(ticker), cacheJson.encodeToString(CachedBars.serializer(), entry))
