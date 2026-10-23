@@ -165,14 +165,25 @@ tasks.register("minifiedJar", proguard.gradle.ProGuardTask::class) {
 // kopiert nur Dateien, die sich seit dem letzten Lauf *dieses Tasks* geändert haben. Läuft
 // also der Prod-Sync und danach der Dev-Sync, bleibt das Prod-Import-Objekt (ohne
 // kotlin.time.toFixed) neben dem Dev-Wasm (braucht es) liegen – der Browser startet mit
-// LinkError "function import requires a callable". Deshalb vor jedem Sync die eigenen
-// Dateien im Ziel löschen, damit der Lauf alles neu kopiert (fehlende Zieldateien führen
-// zu einem vollständigen Kopieren, nicht zu einem inkrementellen).
+// LinkError "function import requires a callable". Nach jedem Lauf wird deshalb geprüft und
+// repariert: das Ziel muss eine exakte Kopie der Quellen sein. (Nicht einfach löschen – der
+// inkrementelle Sync stellt gelöschte, unveränderte Dateien nicht wieder her; damit fehlt
+// danach der Webpack-Entry und der Task wird still übersprungen.)
 tasks.withType<IncrementalSyncTask>().configureEach {
-    doFirst {
+    doLast {
         val dest = destinationDirectory.get()
-        from.files
-            .filter { it.isDirectory }
-            .forEach { src -> src.listFiles()?.forEach { f -> project.delete(dest.resolve(f.name)) } }
+        from.files.filter { it.isDirectory }.forEach { src ->
+            src.listFiles()?.forEach { f ->
+                val target = dest.resolve(f.name)
+                val inSync = if (f.isFile) {
+                    target.isFile && target.length() == f.length() && target.readBytes().contentEquals(f.readBytes())
+                } else {
+                    target.isDirectory
+                }
+                if (!inSync) {
+                    if (f.isDirectory) f.copyRecursively(target, overwrite = true) else f.copyTo(target, overwrite = true)
+                }
+            }
+        }
     }
 }
