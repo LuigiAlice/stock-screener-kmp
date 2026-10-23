@@ -38,21 +38,24 @@ function allowedOrigin(origin) {
   return origin === PAGE_ORIGIN || LOCAL_ORIGINS.has(origin);
 }
 
-function corsHeaders(origin) {
+function corsHeaders(origin, request) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Accept, Content-Type",
+    // Angefragte Header übernehmen: WebKit/Safari löst schon bei gesetzten
+    // Standard-Headern eine Preflight aus; eine feste Liste blockiert dann.
+    "Access-Control-Allow-Headers":
+      request.headers.get("Access-Control-Request-Headers") ?? "Accept, Content-Type",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
 }
 
-function errorResponse(status, message, origin) {
+function errorResponse(status, message, origin, request) {
   return new Response(message, {
     status,
     headers: {
-      ...corsHeaders(origin),
+      ...corsHeaders(origin, request),
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
     },
@@ -103,14 +106,14 @@ export default {
     }
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+      return new Response(null, { status: 204, headers: corsHeaders(origin, request) });
     }
     if (request.method !== "GET") {
-      return errorResponse(405, "Method not allowed", origin);
+      return errorResponse(405, "Method not allowed", origin, request);
     }
 
     const route = targetFor(new URL(request.url));
-    if (!route) return errorResponse(404, "Data source or path not allowed", origin);
+    if (!route) return errorResponse(404, "Data source or path not allowed", origin, request);
 
     let upstream;
     try {
@@ -123,17 +126,17 @@ export default {
         cf: { cacheTtl: route.source.cacheTtl, cacheEverything: true },
       });
     } catch {
-      return errorResponse(502, "Data source is unavailable", origin);
+      return errorResponse(502, "Data source is unavailable", origin, request);
     }
 
     if (upstream.status >= 300 && upstream.status < 400) {
-      return errorResponse(502, "Data source redirected unexpectedly", origin);
+      return errorResponse(502, "Data source redirected unexpectedly", origin, request);
     }
 
     return new Response(upstream.body, {
       status: upstream.status,
       headers: {
-        ...corsHeaders(origin),
+        ...corsHeaders(origin, request),
         "Content-Type": upstream.headers.get("Content-Type") ?? "application/octet-stream",
         "Cache-Control": `public, max-age=${route.source.cacheTtl}`,
       },

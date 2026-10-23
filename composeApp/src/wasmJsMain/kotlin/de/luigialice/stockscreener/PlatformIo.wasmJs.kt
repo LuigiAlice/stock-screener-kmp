@@ -69,11 +69,21 @@ private val LocalProxy = createClientPlugin("LocalProxy") {
     }
 }
 
+/**
+ * Browser verbieten, User-Agent selbst zu setzen (Forbidden Header). Ein gesetzter Wert ist
+ * für CORS kein "simple request" mehr – WebKit/Safari schickt dann eine Preflight, die am
+ * Daten-Proxy scheitert. Die Proxys setzen den User-Agent ohnehin selbst am Ziel.
+ */
+private val DropForbiddenBrowserHeaders = createClientPlugin("DropForbiddenBrowserHeaders") {
+    onRequest { request, _ -> request.headers.remove("User-Agent") }
+}
+
 actual fun createYahooClient(): HttpClient = HttpClient(Js) {
     install(HttpTimeout) {
         connectTimeoutMillis = 20_000
         requestTimeoutMillis = 60_000
     }
+    install(DropForbiddenBrowserHeaders)
     install(LocalProxy)
 }
 
