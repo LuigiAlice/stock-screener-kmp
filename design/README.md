@@ -9,6 +9,7 @@ Die Werte sind aus dem Code abgeleitet („Tinte & Messing"), nicht erfunden.
 |---|---|
 | `stock-screener.figcraft` | FigCraft-Dokument (3 Seiten: Tokens, Komponenten, Screens) |
 | `screens/desktop-treffer.png` | Hauptansicht mit Trefferliste und Chart |
+| `screens/desktop-laufende-erholung.png` | Modus „Laufende Erholung" (5 Kriterien) |
 | `screens/desktop-start.png` | Leerzustand vor dem ersten Scan |
 | `screens/dialog-einstellungen.png` | Scan-Ablauf-Dialog (Zahnrad) |
 | `screens/tokens-farben.png` | Farbpalette |
@@ -66,11 +67,22 @@ Für die Anbindung per MCP (Agenten steuern FigCraft): siehe `AGENTS.md` bzw.
 
 ## Screens
 
-1. **Desktop · Treffer** – Einstellungen links, rechts Kennzahlen, Trefferfilter in einer
-   Zeile, Tabelle mit allen 20 Spalten (Ja/Nein grün/rot, Kann/Muss-Köpfe,
-   Sortier-Indikator), CSV-Aktionen, Chart mit Achsen, Navigation und Quellen-Links
-2. **Desktop · Start** – Leerzustand mit Hinweis zum Universum und CSV-Import
-3. **Dialog · Einstellungen** – Scan-Ablauf (Batch-Größe, Pause) hinter dem Zahnrad
+1. **Desktop · Treffer** – Modus „Erholungsbeginn": Einstellungen links, rechts Kennzahlen,
+   Trefferfilter in einer Zeile, Tabelle mit allen 20 Spalten (Ja/Nein grün/rot,
+   Kann/Muss-Köpfe, Sortier-Indikator), CSV-Aktionen, Chart mit Achsen, Navigation und
+   Quellen-Links
+2. **Desktop · Laufende Erholung** – zweiter Scan-Modus, eigener Screen
+3. **Desktop · Start** – Leerzustand mit Hinweis zum Universum und CSV-Import
+4. **Dialog · Einstellungen** – Scan-Ablauf (Batch-Größe, Pause) hinter dem Zahnrad
+
+## Die beiden Scan-Modi im Vergleich
+
+| | Erholungsbeginn | Laufende Erholung |
+|---|---|---|
+| Regler | Rückgang, Max. Performance, RSI-Bereich, relatives Volumen | keine – RSI-Bereich fest 45–65 |
+| Kriterien (8 / 5) | Perf-Kriterium, RSI im Band, Über SMA20, Unter SMA50, Volumen ok, RSI-Erholung, SMA20-Cross, Höheres Tief | Unter 12M-Kurs, Über SMA20, Über SMA50, Höheres Tief, RSI im Band |
+| Score-Basis | 0–8 | 0–5 |
+| Spalte „Perf" | Wert über das Regler-Fenster, Kopf zeigt „Perf 30 T. %" | kein Wert („—"), Kopf „Perf %" |
 
 ## Aktualisieren
 
