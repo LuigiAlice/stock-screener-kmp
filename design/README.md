@@ -84,6 +84,9 @@ Für die Anbindung per MCP (Agenten steuern FigCraft): siehe `AGENTS.md` bzw.
 | Score-Basis | 0–8 | 0–5 |
 | Spalte „Perf" | Wert über das Regler-Fenster, Kopf zeigt „Perf 30 T. %" | kein Wert („—"), Kopf „Perf %" |
 
+Die Score-Zelle zeigt in beiden Modi die Zahl **und** einen Messing-Fortschrittsbalken
+der Quote (z. B. 4/5 = 80 %) — so wie die App ihn rendert.
+
 ## Aktualisieren
 
 Farb-/Text-Stiles sind im Dokument angelegt (`Farbe/…`, `Typo/…`). Ändert sich das
