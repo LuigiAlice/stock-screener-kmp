@@ -14,6 +14,31 @@ Die Werte sind aus dem Code abgeleitet („Tinte & Messing"), nicht erfunden.
 | `screens/dialog-einstellungen.png` | Scan-Ablauf-Dialog (Zahnrad) |
 | `screens/tokens-farben.png` | Farbpalette |
 | `screens/tokens-typografie.png` | Text-Stiles |
+| `screens/komponenten.png` | Komponenten-Bibliothek |
+
+## Komponenten (Seite „02 Komponenten")
+
+11 Komponenten plus 2 Varianten-Sets — alle mit den Stilen aus `Farbe/…` und `Typo/…`:
+
+| Komponente | Inhalt | Varianten |
+|---|---|---|
+| `Regler/Zeile` | Label + Bahn + Griff | |
+| `Button/Primär` | Messing-Fläche, dunkler Text | |
+| `Button/Text` | Textbutton in Messing | |
+| `Checkbox/Kann-Muss` | Kasten + Label | |
+| `Tabellenkopf` | Sortierbarer Name + Kann/Muss-Umschalter | |
+| `Metrik` | Wert (22 Bold) + Label (12 dim) | |
+| `Score/Zelle` | Quote + Messing-Fortschrittsbalken | |
+| `Kopf/Titelzeile` | Titel + Zahnrad, verteilt | |
+| `Feld/Ticker` | Beschriftetes Eingabefeld | |
+| `Leiste/CSV` | Drei Aktionen | |
+| `Zelle/Zahl` | Zahlenzelle der Tabelle | |
+| `Zelle/Kriterium` | Ja/Nein der Tabelle | `Wert=Ja` (grün), `Wert=Nein` (rot) |
+| `Modus/Button` | Modus-Umschalter | `Zustand=Aktiv` (Messing), `Zustand=Inaktiv` (dim) |
+
+**Stand:** die Komponenten sind vollständig, aber die Screens bestehen noch aus
+eigenen Kopien — sie sind noch nicht als Instanzen eingesetzt. Erst der
+Tausch macht eine Änderung an einer Komponente in allen Screens wirksam.
 
 ## Öffnen
 
