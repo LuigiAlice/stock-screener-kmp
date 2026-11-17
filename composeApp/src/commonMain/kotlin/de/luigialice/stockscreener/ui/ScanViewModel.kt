@@ -44,7 +44,7 @@ expect abstract class PlatformViewModel()
 val ScanState.isScanning: Boolean
     get() = this is ScanState.Running || (this is ScanState.Done && scanned < total)
 
-private data class FetchOutcome(val bars: List<Bar>? = null, val name: String? = null, val reason: FailedReason? = null)
+private data class FetchOutcome(val bars: List<Bar>? = null, val name: String? = null, val reason: FailedReason? = null, val downloaded: Boolean = false)
 
 class ScanViewModel(
     private val api: YahooApi = YahooApi(),
@@ -60,6 +60,8 @@ class ScanViewModel(
     private var job: Job? = null
     private var lastUniverse: Universe? = null
     private var lastApplied: Pair<ScanParams, ScanSettings>? = null
+    private var importedResults = false
+    private var importBaseline: Pair<ScanParams, ScanSettings>? = null
 
     /** Letzter vollständig abgeschlossener Ergebnisstand (für Abbrechen ohne Datenverlust). */
     private var lastCompleteState: ScanState.Done? = null
@@ -128,6 +130,8 @@ class ScanViewModel(
         _universe.value = uni
         lastUniverse = uni
         lastApplied = null
+        importedResults = true
+        importBaseline = null
         val total = rows.size + result.failed.size
         val done = ScanState.Done(result, scanned = total, total = total)
         lastCompleteState = done
@@ -161,6 +165,8 @@ class ScanViewModel(
         job?.cancel()
         lastUniverse = universe
         lastApplied = params to settings
+        importedResults = false
+        importBaseline = null
         _universe.value = universe
         downloadRunning = true
         _state.value = ScanState.Running(0, tickers.size, "")
@@ -189,7 +195,7 @@ class ScanViewModel(
                             networkFetches++
                             try {
                                 val fetched = withContext(Dispatchers.Default) { api.fetchBars(ticker) }
-                                ticker to FetchOutcome(bars = fetched.bars, name = fetched.name)
+                                ticker to FetchOutcome(bars = fetched.bars, name = fetched.name, downloaded = true)
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: YahooHttpException) {
@@ -206,7 +212,7 @@ class ScanViewModel(
                             outcome.bars.isNullOrEmpty() ->
                                 failed[ticker] = outcome.reason ?: FailedReason.NO_DATA
                             else -> {
-                                barCache.store(ticker, outcome.bars, outcome.name)
+                                if (outcome.downloaded) barCache.store(ticker, outcome.bars, outcome.name)
                                 val stock = universe.stocks[ticker] ?: StockInfo()
                                 outcome.name?.let { fetchedNames[ticker] = it }
                                 val row = Screener.calcRow(ticker, stock.displayName(outcome.name), outcome.bars, params, stock.exchange)
@@ -263,14 +269,20 @@ class ScanViewModel(
         activeTickers: List<String>,
         batchSize: Int,
         pauseSeconds: Int,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        automatic: Boolean = false
     ) {
         val uni = lastUniverse ?: return
         if (uni.tickers != activeTickers) return // aktives Universum weicht vom gescannten ab
         if (downloadRunning) return // echter Download läuft → der Scan erledigt das
         val signature = params to settings
+        if (importedResults && automatic) {
+            val baseline = importBaseline
+            if (baseline == null) importBaseline = signature
+            if (baseline == null || baseline == signature) return
+        }
         if (signature == lastApplied) return
-        if (barHistory.bars.value.isEmpty()) {
+        if (importedResults || barHistory.bars.value.isEmpty()) {
             runScan(uni, params, settings, batchSize, pauseSeconds, scope)
         } else {
             runId++

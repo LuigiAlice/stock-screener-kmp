@@ -73,6 +73,46 @@ class ScanViewModelTest {
     }
 
     @Test
+    fun cachedScanDoesNotRenewDownloadTimestamp() = kotlinx.coroutines.runBlocking {
+        val store = de.luigialice.stockscreener.data.InMemoryBarStore()
+        val cache = BarCache(store)
+        cache.store("TEST", bars(), "Test")
+        val key = store.keys.single()
+        val original = store.load(key)
+        delay(10)
+        val vm = ScanViewModel(barCache = cache)
+        vm.runScan(Universe(mapOf("TEST" to de.luigialice.stockscreener.model.StockInfo("Test"))),
+            params(ScanMode.REBOUND_START), ScanSettings(1, false, ScanMode.REBOUND_START), 10, 0, this)
+        while (vm.jobActive()) delay(10)
+        assertEquals(original, store.load(key))
+        assertEquals(1, (vm.state.value as ScanState.Done).result.rows.size)
+    }
+
+    @Test
+    fun automaticRevalidationPreservesImportEvenWithOneChartLoaded() = kotlinx.coroutines.runBlocking {
+        val cache = BarCache(null)
+        cache.store("AAA", bars(), "Alpha")
+        cache.store("BBB", bars(), "Beta")
+        val vm = ScanViewModel(barCache = cache)
+        val rows = listOf("AAA", "BBB").map {
+            Screener.calcRow(it, it, bars(), params(ScanMode.REBOUND_START))!!
+        }
+        vm.loadResults(buildImportedResult(rows))
+        val imported = vm.state.value
+        val p = params(ScanMode.REBOUND_START)
+        val settings = ScanSettings(4, true, ScanMode.REBOUND_START)
+        vm.revalidate(p, settings, listOf("AAA", "BBB"), 10, 0, this, automatic = true)
+        vm.loadBars("AAA", this)
+        awaitBars(vm)
+        vm.revalidate(p, settings, listOf("AAA", "BBB"), 10, 0, this, automatic = true)
+        assertEquals(imported, vm.state.value)
+        // A deliberate rule change must evaluate the entire imported universe.
+        vm.revalidate(p.copy(maxPerf = -20.0), settings, listOf("AAA", "BBB"), 10, 0, this, automatic = true)
+        while (vm.jobActive()) delay(10)
+        assertEquals(2, (vm.state.value as ScanState.Done).result.rows.size)
+    }
+
+    @Test
     fun modeSwitchRescansWithNewCriteria() = kotlinx.coroutines.runBlocking {
         val dir = tempDir()
         fs.deleteRecursively(dir)

@@ -5,6 +5,7 @@ import de.luigialice.stockscreener.model.ScanRow
 import de.luigialice.stockscreener.ui.results.buildImportedResult
 import de.luigialice.stockscreener.ui.results.parseHitsCsv
 import de.luigialice.stockscreener.ui.results.toCsv
+import de.luigialice.stockscreener.ui.results.hits
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -56,7 +57,8 @@ class HitsCsvRoundTripTest {
         assertEquals(5, first.score)
         assertEquals("2026-09-09", first.lastTradingDay)
         assertEquals("https://finance.yahoo.com/quote/AAPL", first.yahooChart)
-        assertEquals(mapOf("rückgang 10 tage" to true, "über sma20" to false), first.criteria)
+        assertEquals(true, first.below12m)
+        assertEquals(mapOf("rückgang 10 tage" to true, "Über SMA20" to false), first.criteria)
     }
 
     @Test
@@ -65,6 +67,12 @@ class HitsCsvRoundTripTest {
         assertEquals(ScanMode.ONGOING_RECOVERY, result.settings.mode)
         assertEquals(false, result.settings.onlyBelow12m)
         assertEquals(1, result.settings.scoreMin)
+    }
+
+    @Test
+    fun savedMustCriterionStillFiltersImportedRows() {
+        val imported = buildImportedResult(parseHitsCsv(listOf(row()).toCsv()))
+        assertTrue(imported.rows.hits(1, imported.settings, setOf("Über SMA20")).isEmpty())
     }
 
     @Test

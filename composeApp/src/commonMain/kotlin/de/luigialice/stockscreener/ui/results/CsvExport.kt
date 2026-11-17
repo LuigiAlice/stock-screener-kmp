@@ -30,6 +30,11 @@ internal fun List<ScanRow>.toCsv(): String {
 /**
  * Liest eine exportierte Treffer-CSV wieder ein und rekonstruiert ScanRow + ScanSettings.
  */
+private val canonicalCriteria = listOf(
+    "Perf-Kriterium", "RSI im Band", "Über SMA20", "Unter SMA50", "Volumen ok",
+    "RSI-Erholung", "SMA20-Cross", "Höheres Tief", "Unter 12M-Kurs", "Über SMA50"
+).associateBy { it.lowercase() }
+
 internal fun parseHitsCsv(text: String): List<ScanRow> {
     val lines = text.lines().filter { it.isNotBlank() }
     if (lines.isEmpty()) return emptyList()
@@ -48,13 +53,13 @@ internal fun parseHitsCsv(text: String): List<ScanRow> {
             price = cols[idx["kurs"] ?: 2].toDoubleOrNull() ?: 0.0,
             performance = cols[idx["perf"] ?: 3].toDoubleOrNull(),
             perf12m = cols[idx["perf12m"] ?: 4].toDoubleOrNull(),
-            below12m = null,
+            below12m = cols[idx["perf12m"] ?: 4].toDoubleOrNull()?.let { it < 0.0 },
             rsi14 = cols[idx["rsi"] ?: 5].toDoubleOrNull() ?: 0.0,
             relVolume = cols[idx["relvol"] ?: 6].toDoubleOrNull() ?: 0.0,
             sma20Pct = cols[idx["sma20_pct"] ?: 7].toDoubleOrNull() ?: 0.0,
             sma50Pct = cols[idx["sma50_pct"] ?: 8].toDoubleOrNull() ?: 0.0,
             criteria = criteriaHeaders.mapIndexed { i, h ->
-                h.replace("_", " ") to cols[tagIdx + 1 + i].equals("Ja", true)
+                h.replace("_", " ").let { canonicalCriteria[it] ?: it } to cols[tagIdx + 1 + i].equals("Ja", true)
             }.toMap(),
             score = cols[idx["score"] ?: 9].toIntOrNull() ?: 0,
             lastTradingDay = cols[tagIdx],

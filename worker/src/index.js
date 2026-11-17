@@ -123,7 +123,7 @@ export default {
           "User-Agent": "Mozilla/5.0 (compatible; StockScreener/1.0)",
         },
         redirect: "manual",
-        cf: { cacheTtl: route.source.cacheTtl, cacheEverything: true },
+        cf: { cacheTtlByStatus: { "200-299": route.source.cacheTtl, "300-599": -1 }, cacheEverything: true },
       });
     } catch {
       return errorResponse(502, "Data source is unavailable", origin, request);
@@ -138,7 +138,7 @@ export default {
       headers: {
         ...corsHeaders(origin, request),
         "Content-Type": upstream.headers.get("Content-Type") ?? "application/octet-stream",
-        "Cache-Control": `public, max-age=${route.source.cacheTtl}`,
+        "Cache-Control": upstream.ok ? `public, max-age=${route.source.cacheTtl}` : "no-store",
       },
     });
   },

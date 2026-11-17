@@ -292,7 +292,7 @@ internal fun SettingsPane(
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return@LaunchedEffect
             delay(300.milliseconds) // Debounce bei Slider-Bewegungen
-            viewModel.revalidate(paramsFor(mode), settingsFor(mode), tickers, batchSize, pause, scope)
+            viewModel.revalidate(paramsFor(mode), settingsFor(mode), tickers, batchSize, pause, scope, automatic = true)
         }
         if (state.isScanning) {
             TextButton(onClick = { viewModel.cancel() }) { Text("Abbrechen") }
