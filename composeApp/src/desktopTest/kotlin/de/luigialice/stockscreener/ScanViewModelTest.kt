@@ -4,6 +4,7 @@ import de.luigialice.stockscreener.data.BarCache
 import de.luigialice.stockscreener.data.FileBarStore
 import de.luigialice.stockscreener.data.currentTimeMs
 import de.luigialice.stockscreener.model.Bar
+import de.luigialice.stockscreener.model.StockInfo
 import de.luigialice.stockscreener.model.Universe
 import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanParams
@@ -13,6 +14,10 @@ import de.luigialice.stockscreener.ui.ScanViewModel
 import de.luigialice.stockscreener.ui.isScanning
 import de.luigialice.stockscreener.ui.results.buildImportedResult
 import de.luigialice.stockscreener.screener.Screener
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -70,6 +75,40 @@ class ScanViewModelTest {
             delay(25)
         }
         error("Modus $mode kam nie an; letzter Stand: ${vm.state.value}")
+    }
+
+ @Test fun ruleChangeAfterCancellationCompletesTheUniverse() = runBlocking {
+  val cache=BarCache(null)
+  val bars=List(300) { Bar(LocalDate(2025,1,1),100.0+it%7,1000.0) }
+  cache.store("AAA",bars,"Alpha"); cache.store("BBB",bars,"Beta")
+  val vm=ScanViewModel(barCache=cache)
+  val p=ScanParams(ScanMode.REBOUND_START)
+  val settings=ScanSettings(1,false,p.mode)
+  val stopper=launch(start=CoroutineStart.UNDISPATCHED) {
+   vm.state.first { it is ScanState.Done && it.scanned==1 }
+   vm.cancel()
+  }
+  vm.runScan(Universe(mapOf("AAA" to StockInfo("Alpha"),"BBB" to StockInfo("Beta"))),p,settings,1,0,this)
+  stopper.join()
+  while(vm.jobActive()) delay(1)
+  vm.revalidate(p.copy(maxPerf=-20.0),settings,listOf("AAA","BBB"),1,0,this)
+  while(vm.jobActive()) delay(1)
+  val done=vm.state.value as ScanState.Done
+  assertEquals(2,done.scanned)
+  assertEquals(2,done.result.rows.size)
+  assertEquals(0,done.result.failed.size)
+ }
+
+    @Test
+    fun importUpdatesSelectedScanMode() {
+        val vm = ScanViewModel(barCache = BarCache(null))
+        val mode = ScanMode.ONGOING_RECOVERY
+        val row = Screener.calcRow("TEST", "Test", bars(), params(mode))!!
+        vm.loadResults(buildImportedResult(listOf(row)))
+        assertEquals(mode, vm.selectedMode.value)
+        vm.selectMode(ScanMode.REBOUND_START)
+        vm.loadResults(buildImportedResult(listOf(row)))
+        assertEquals(mode, vm.selectedMode.value)
     }
 
     @Test

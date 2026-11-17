@@ -8,6 +8,7 @@ import de.luigialice.stockscreener.data.createBarStore
 import de.luigialice.stockscreener.data.currentTimeMs
 import de.luigialice.stockscreener.model.Bar
 import de.luigialice.stockscreener.model.FailedReason
+import de.luigialice.stockscreener.model.ScanMode
 import de.luigialice.stockscreener.model.ScanParams
 import de.luigialice.stockscreener.model.ScanResult
 import de.luigialice.stockscreener.model.ScanRow
@@ -60,6 +61,12 @@ class ScanViewModel(
     private var job: Job? = null
     private var lastUniverse: Universe? = null
     private var lastApplied: Pair<ScanParams, ScanSettings>? = null
+    private var completedDownload = false
+    private val _selectedMode = MutableStateFlow(ScanMode.REBOUND_START)
+    val selectedMode: StateFlow<ScanMode> = _selectedMode
+
+    fun selectMode(mode: ScanMode) { _selectedMode.value = mode }
+
     private var importedResults = false
     private var importBaseline: Pair<ScanParams, ScanSettings>? = null
 
@@ -131,6 +138,8 @@ class ScanViewModel(
         lastUniverse = uni
         lastApplied = null
         importedResults = true
+        completedDownload = false
+        selectMode(result.settings.mode)
         importBaseline = null
         val total = rows.size + result.failed.size
         val done = ScanState.Done(result, scanned = total, total = total)
@@ -165,6 +174,8 @@ class ScanViewModel(
         job?.cancel()
         lastUniverse = universe
         lastApplied = params to settings
+        completedDownload = false
+        selectMode(params.mode)
         importedResults = false
         importBaseline = null
         _universe.value = universe
@@ -235,6 +246,7 @@ class ScanViewModel(
                         total = total
                     )
                     if (done.scanned >= total) {
+                        completedDownload = true
                         lastFailed = failed.toMap()
                         lastCompleteState = done
                     }
@@ -282,7 +294,7 @@ class ScanViewModel(
             if (baseline == null || baseline == signature) return
         }
         if (signature == lastApplied) return
-        if (importedResults || barHistory.bars.value.isEmpty()) {
+        if (importedResults || !completedDownload || barHistory.bars.value.isEmpty()) {
             runScan(uni, params, settings, batchSize, pauseSeconds, scope)
         } else {
             runId++

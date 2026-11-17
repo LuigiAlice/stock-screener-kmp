@@ -100,7 +100,7 @@ internal fun SettingsPane(
     rules: ReboundRulesState,
     modifier: Modifier = Modifier,
 ) {
-    var mode by remember { mutableStateOf(ScanMode.REBOUND_START) }
+    val mode by viewModel.selectedMode.collectAsState()
     var batchSize by remember { mutableStateOf(25) }
     var pause by remember { mutableStateOf(1) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -144,7 +144,7 @@ internal fun SettingsPane(
         fun applyMode(m: ScanMode) {
             val tickers = activeUniverse?.tickers ?: parseTickers(tickerText)
             if (tickers.isEmpty()) return // nichts zu bewerten
-            mode = m
+            viewModel.selectMode(m)
             if (viewModel.downloadRunning()) {
                 // Laufenden Download mit dem neuen Modus neu starten:
                 // bereits geladene Ticker kommen aus dem Cache und kosten keine Zeit

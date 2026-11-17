@@ -29,6 +29,26 @@ class SettingsPaneTest {
     private fun paneModifier(): Modifier = Modifier.fillMaxWidth().height(1200.dp)
 
     @Test
+    fun importedOngoingModeUpdatesVisibleControls() = runSkikoComposeUiTest(size = Size(900f, 1400f)) {
+        val vm = ScanViewModel(barCache = tempCache())
+        setContent {
+            AppTheme {
+                SettingsPane(ScanState.Idle, vm, rememberCoroutineScope(), paneModifier())
+            }
+        }
+        onNodeWithText("Rückgang (Handelstage)", substring = true).assertExists()
+        runOnIdle {
+            val row = sampleRow(criteria = linkedMapOf(
+                "Unter 12M-Kurs" to true, "Über SMA20" to true, "Über SMA50" to true,
+                "Höheres Tief" to true, "RSI im Band" to true
+            ), score = 5)
+            vm.loadResults(de.luigialice.stockscreener.ui.results.buildImportedResult(listOf(row)))
+        }
+        onNodeWithText("RSI-Bereich: 45 – 65 (fest)").assertExists()
+        onNodeWithText("Rückgang (Handelstage)", substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun mindestScoreSliderIsGone() = runSkikoComposeUiTest(size = Size(900f, 1400f)) {
         val vm = ScanViewModel(barCache = tempCache())
         setContent {
