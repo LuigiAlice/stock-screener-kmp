@@ -112,17 +112,12 @@ Für die Anbindung per MCP (Agenten steuern FigCraft): siehe `AGENTS.md` bzw.
 Die Score-Zelle zeigt in beiden Modi die Zahl **und** einen Messing-Fortschrittsbalken
 der Quote (z. B. 4/5 = 80 %) — so wie die App ihn rendert.
 
-## Tokens
-
-Die Farb- und Text-Stiles sind an die Ebenen **gebunden** (nicht nur dokumentiert):
-577 Bindungen über die drei Screens plus die Hauptkomponenten. Ein Blick in den
-Inspektor zeigt den Token-Namen (`Farbe/Messing`, `Typo/Table Cell`), und eine
-Änderung des Stiles wirkt in allen Instanzen.
-
-Neu dazu: `Typo/Button` (Inter SemiBold 14/20) für Button-Beschriftungen.
-
 ## Aktualisieren
 
-Ändert sich das Theme im Code, hier die Stiles anpassen (`Farbe/…`, `Typo/…`) –
-alle gebundenen Ebenen ziehen mit. Danach die Screens exportieren
+Farb-/Text-Stiles sind an die Ebenen gebunden (`Farbe/…`, `Typo/…`):
+628 Stilzuordnungen, ergänzt um 242 Text-Stilreferenzen. `Typo/Button` verwendet
+Inter SemiBold 14/20 für Button-Beschriftungen.
+
+Ändert sich das Theme im Code, hier die betroffenen Stile anpassen — die
+gebundenen Ebenen ziehen mit. Danach die Screens exportieren
 (`file.export`, siehe `screens/`).
